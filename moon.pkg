@@ -1,4 +1,5 @@
 import {
   "bobzhang/html_parser",
   "bobzhang/html_parser/dom",
+  "moonbitlang/core/json",
 }

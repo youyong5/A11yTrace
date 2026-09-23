@@ -40,6 +40,34 @@ match @a11ytrace.audit_html_with_rules(html, selected) {
 
 `heading-level-skipped` is a suggestion for structural review, so it can be useful to select it independently in a content-build check. Selection does not change the caller-provided array, and all selected rules share one parsed DOM; findings remain in document order.
 
+## JSON output
+
+`render_audit_json(result : AuditResult) -> String` produces compact, parseable JSON using MoonBit's `moonbitlang/core/json` library. Every document has these fields, regardless of status:
+
+- `status`: `"findings"`, `"findings_with_parse_errors"`, or `"parse_errors"`.
+- `findings`: an array of objects with `rule_id`, `message`, `suggestion`, `element_path`, `line`, and `column`.
+- `parse_diagnostics`: an array of objects with `code`, `message`, `line`, and `column`.
+
+`line` and `column` are JSON numbers when supplied by the parser and JSON `null` when unavailable. A `"findings"` result with an empty findings array means only that these implemented static checks found nothing; it does not mean the page meets all accessibility standards.
+
+Render only an `Audited` result. A rule-selection `ConfigurationError` is not serialized as an empty audit: report or correct `UnknownRuleId` before obtaining an `AuditResult`.
+
+```moonbit nocheck
+import {
+  "moonbitlang/core/json" @json,
+  "youyong5/a11ytrace" @a11ytrace,
+}
+
+match @a11ytrace.audit_html_with_rules(html, ["img-alt-missing"]) {
+  Audited(result) => {
+    let document = @a11ytrace.render_audit_json(result)
+    let parsed = @json.parse(document)
+    // Read the documented status/findings/parse_diagnostics fields from parsed.
+  }
+  ConfigurationError(UnknownRuleId(rule_id)) => ()
+}
+```
+
 - A static-site generator can audit each rendered page before writing it.
 - A documentation-site build can audit generated guide fragments.
 - A frontend CI job can audit fixture or server-rendered HTML and fail on findings.

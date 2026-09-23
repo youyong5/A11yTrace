@@ -81,6 +81,70 @@ pub fn audit_html_with_rules(
 }
 
 ///|
+/// Render an audit result as a compact JSON document for programmatic use.
+///
+/// The JSON object always contains `status`, `findings`, and
+/// `parse_diagnostics`. Optional source positions are rendered as JSON `null`
+/// when the parser did not provide them.
+pub fn render_audit_json(result : AuditResult) -> String {
+  @json.to_json(audit_result_json(result)).stringify()
+}
+
+///|
+fn audit_result_json(result : AuditResult) -> Json {
+  match result {
+    Findings(findings) =>
+      {
+        "status": "findings",
+        "findings": findings.map(finding_json),
+        "parse_diagnostics": [],
+      }
+    FindingsWithParseErrors(findings, diagnostics) =>
+      {
+        "status": "findings_with_parse_errors",
+        "findings": findings.map(finding_json),
+        "parse_diagnostics": diagnostics.map(parse_diagnostic_json),
+      }
+    ParseErrors(diagnostics) =>
+      {
+        "status": "parse_errors",
+        "findings": [],
+        "parse_diagnostics": diagnostics.map(parse_diagnostic_json),
+      }
+  }
+}
+
+///|
+fn finding_json(finding : Finding) -> Json {
+  {
+    "rule_id": finding.rule_id,
+    "message": finding.message,
+    "suggestion": finding.suggestion,
+    "element_path": finding.element_path,
+    "line": optional_int_json(finding.line),
+    "column": optional_int_json(finding.column),
+  }
+}
+
+///|
+fn parse_diagnostic_json(diagnostic : ParseDiagnostic) -> Json {
+  {
+    "code": diagnostic.code,
+    "message": diagnostic.message,
+    "line": optional_int_json(diagnostic.line),
+    "column": optional_int_json(diagnostic.column),
+  }
+}
+
+///|
+fn optional_int_json(value : Int?) -> Json {
+  match value {
+    Some(value) => @json.to_json(value)
+    None => null
+  }
+}
+
+///|
 fn audit_html_with_enabled_rules(
   html : String,
   enabled_rule_ids : Array[String],

@@ -623,3 +623,163 @@ test "reports an unknown selected rule ID as a configuration error" {
     Audited(_) => fail("unknown rule IDs must not be ignored")
   }
 }
+
+///|
+test "renders an empty audit result as parseable JSON" {
+  let json = @a11ytrace.render_audit_json(
+    @a11ytrace.audit_html("<img src=\"logo.svg\" alt=\"Logo\">"),
+  )
+  assert_true(@json.valid(json))
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "findings": Array(findings),
+      "parse_diagnostics": Array(diagnostics),
+      ..
+    } => {
+      assert_eq(status, "findings")
+      assert_eq(findings.length(), 0)
+      assert_eq(diagnostics.length(), 0)
+    }
+    _ => fail("JSON result must have the documented fields")
+  }
+}
+
+///|
+test "renders multiple findings with parser source positions" {
+  let json = @a11ytrace.render_audit_json(
+    @a11ytrace.audit_html("<img src=\"one.png\"><input>"),
+  )
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "findings": Array([first, second]),
+      "parse_diagnostics": Array([]),
+      ..
+    } => {
+      assert_eq(status, "findings")
+      match first {
+        {
+          "rule_id": String(rule_id),
+          "element_path": String(path),
+          "line": Number(line, ..),
+          "column": Number(column, ..),
+          ..
+        } => {
+          assert_eq(rule_id, "img-alt-missing")
+          assert_eq(path, "img:nth-of-type(1)")
+          assert_eq(line, 1.0)
+          assert_eq(column, 1.0)
+        }
+        _ => fail("the first finding must expose its public fields")
+      }
+      match second {
+        { "rule_id": String(rule_id), .. } =>
+          assert_eq(rule_id, "form-control-name-missing")
+        _ => fail("the second finding must expose its rule ID")
+      }
+    }
+    _ => fail("JSON result must preserve multiple findings")
+  }
+}
+
+///|
+test "renders unknown positions and special characters safely" {
+  let result : @a11ytrace.AuditResult = Findings([
+    {
+      rule_id: "custom \"rule\" 名称\n",
+      message: "Line one\nLine two with \\ and \"quotes\"",
+      suggestion: "使用 Unicode：✓",
+      element_path: "custom:nth-of-type(1)",
+      line: None,
+      column: None,
+    },
+  ])
+  let json = @a11ytrace.render_audit_json(result)
+  assert_true(@json.valid(json))
+  match @json.parse(json) {
+    {
+      "findings": Array(
+        [
+          {
+            "rule_id": String(rule_id),
+            "message": String(message),
+            "suggestion": String(suggestion),
+            "line": Null,
+            "column": Null,
+            ..
+          },
+        ]
+      ),
+      ..
+    } => {
+      assert_eq(rule_id, "custom \"rule\" 名称\n")
+      assert_eq(message, "Line one\nLine two with \\ and \"quotes\"")
+      assert_eq(suggestion, "使用 Unicode：✓")
+    }
+    _ => fail("JSON strings must round-trip through the standard parser")
+  }
+}
+
+///|
+test "renders recoverable parser diagnostics distinctly" {
+  let json = @a11ytrace.render_audit_json(
+    @a11ytrace.audit_html("<img src=\"x.png\"></span>"),
+  )
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "findings": Array([finding]),
+      "parse_diagnostics": Array([diagnostic]),
+      ..
+    } => {
+      assert_eq(status, "findings_with_parse_errors")
+      match finding {
+        { "rule_id": String(rule_id), .. } =>
+          assert_eq(rule_id, "img-alt-missing")
+        _ => fail("recoverable HTML must retain its finding")
+      }
+      match diagnostic {
+        {
+          "code": String(code),
+          "line": Number(line, ..),
+          "column": Number(column, ..),
+          ..
+        } => {
+          assert_eq(code, "unexpected-end-tag")
+          assert_eq(line, 1.0)
+          assert_eq(column, 24.0)
+        }
+        _ => fail("recoverable HTML must expose its parser diagnostic")
+      }
+    }
+    _ => fail("recoverable diagnostics need their own JSON status")
+  }
+}
+
+///|
+test "renders parser failures distinctly" {
+  let result : @a11ytrace.AuditResult = ParseErrors([
+    {
+      code: "parser-failure",
+      message: "No DOM available",
+      line: None,
+      column: None,
+    },
+  ])
+  let json = @a11ytrace.render_audit_json(result)
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "findings": Array([]),
+      "parse_diagnostics": Array(
+        [{ "code": String(code), "line": Null, "column": Null, .. }]
+      ),
+      ..
+    } => {
+      assert_eq(status, "parse_errors")
+      assert_eq(code, "parser-failure")
+    }
+    _ => fail("parser failures need their own JSON status")
+  }
+}
