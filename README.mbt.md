@@ -61,6 +61,12 @@ match @a11ytrace.audit_html_fragment_with_rules(
 
 Fragment parsing preserves the same deterministic paths, source locations when available, parser diagnostics, heading behavior, and template exclusion as normal auditing; in particular, the first native heading in a fragment may use any level. Name references are limited to the supplied markup: an `aria-labelledby` target or `<label for>` outside the fragment cannot be resolved and does not count as a name.
 
+The in-module consumer example is a separate MoonBit package that imports only this library's public API. Run it from the repository root with:
+
+```text
+moon run --target native examples/consumer
+```
+
 ## JSON output
 
 `render_audit_json(result : AuditResult) -> String` produces compact, parseable JSON using MoonBit's `moonbitlang/core/json` library. Every document has these fields, regardless of status:

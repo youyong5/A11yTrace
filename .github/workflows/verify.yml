@@ -1,0 +1,48 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # v1.22 is the fixed release recommended by the action's documentation.
+      - name: Install MoonBit
+        uses: hustcer/setup-moonbit@v1.22
+        with:
+          version: 0.1.20260920
+
+      - name: Show toolchain version
+        run: moon version --all
+
+      - name: Check generated interfaces and formatting
+        run: |
+          moon info
+          moon fmt
+          git diff --exit-code
+
+      - name: Test root library on JavaScript
+        run: |
+          moon check --target js
+          moon test --target js
+
+      - name: Test root library on WebAssembly
+        run: |
+          moon check --target wasm
+          moon test --target wasm
+
+      - name: Test native packages and build the CLI
+        run: |
+          moon check --target native
+          moon test --target native
+          moon build --target native cmd/a11ytrace
+
+      - name: Run the cross-package consumer example
+        run: moon run --target native examples/consumer
