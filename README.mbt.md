@@ -35,6 +35,8 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 
 `link-name-missing` reports an `<a href>` without recognizable text, non-empty image alt text, ARIA name, or fallback title. It ignores script, style, and template text. It checks presence of a name, not whether the destination is described clearly; when no supported source is present, SVG-containing links are conservatively left unreported until SVG name sources are supported.
 
+`button-name-missing` reports unnamed native `<button>`, `input[type="button"]`, and `input[type="image"]`; custom `role="button"` is outside this rule. It recognizes supported native text, image alt, value, ARIA, and title sources as appropriate, while leaving SVG-only native buttons unreported until SVG name sources are supported. It is a static name-presence check, not a WCAG conformance conclusion.
+
 For example, both rules can be reported from one fragment:
 
 ```moonbit nocheck
@@ -48,12 +50,12 @@ match @a11ytrace.audit_html("<img src=\"chart.svg\"><input placeholder=\"Email\"
 }
 ```
 
-All three current rules can be reported in document order:
+All four current rules can be reported in document order:
 
 ```moonbit nocheck
-match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\"></a>") {
+match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\"></a><button></button>") {
   Findings(findings) => {
-    // img-alt-missing, form-control-name-missing, link-name-missing
+    // img-alt-missing, form-control-name-missing, link-name-missing, button-name-missing
   }
   FindingsWithParseErrors(findings, errors) => ()
   ParseErrors(errors) => ()

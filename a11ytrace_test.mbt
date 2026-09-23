@@ -165,9 +165,8 @@ test "does not let unrelated explicit labels name another control" {
 }
 
 ///|
-test "excludes hidden and button-like inputs" {
-  let html = "<input type=\"hidden\"><input type=\"submit\"><input type=\"reset\">" +
-    "<input type=\"button\"><input type=\"image\">"
+test "excludes hidden submit and reset inputs" {
+  let html = "<input type=\"hidden\"><input type=\"submit\"><input type=\"reset\">"
   match @a11ytrace.audit_html(html) {
     Findings(findings) => assert_eq(findings.length(), 0)
     FindingsWithParseErrors(_, _) =>
@@ -287,6 +286,127 @@ test "keeps image form and link findings in document order" {
       assert_eq(findings[2].rule_id, "link-name-missing")
       assert_eq(findings[2].line, Some(1))
       assert_eq(findings[2].column, Some(25))
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "accepts named native buttons" {
+  let html = "<button>Save</button>" +
+    "<button><img src=\"save.png\" alt=\"Save\"></button>" +
+    "<button><img src=\"gear.png\" alt=\"\"><span>Settings</span></button>" +
+    "<button aria-label=\"Close\"></button>" +
+    "<span id=\"menu-label\">Menu</span><button aria-labelledby=\"menu-label\"></button>" +
+    "<button title=\"Help\"></button>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports empty and decorative-image-only native buttons" {
+  match
+    @a11ytrace.audit_html(
+      "<button> </button><button><img src=\"icon.png\" alt=\"\"></button>",
+    ) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[1].rule_id, "button-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "uses non-empty value aria and title for input buttons" {
+  let html = "<input type=\"button\" value=\"Save\">" +
+    "<input type=\"button\" aria-label=\"Close\">" +
+    "<input type=\"button\" title=\"Help\">" +
+    "<input type=\"button\" value=\"\">"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[0].element_path, "input:nth-of-type(4)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "checks image inputs and excludes submit and reset inputs" {
+  let html = "<input type=\"image\" alt=\"Search\">" +
+    "<input type=\"image\" aria-label=\"Upload\">" +
+    "<input type=\"image\">" +
+    "<input type=\"submit\"><input type=\"reset\">"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[0].element_path, "input:nth-of-type(3)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "conservatively skips svg-only native buttons" {
+  match
+    @a11ytrace.audit_html(
+      "<button><svg></svg></button><button aria-label=\"Menu\"><svg></svg></button>",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "does not use inactive text or type case to bypass button checks" {
+  let html = "<button><script>Ignored</script></button>" +
+    "<button><style>.x { display: none; }</style></button>" +
+    "<button><template>Ignored</template></button>" +
+    "<input type=\"BUTTON\" value=\"\">" +
+    "<input type=\"ImAgE\">"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 5)
+      for finding in findings {
+        assert_eq(finding.rule_id, "button-name-missing")
+      }
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "keeps all four rule findings in document order" {
+  let html = "<img src=\"x.png\"><input><a href=\"/empty\"></a><button></button>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[2].rule_id, "link-name-missing")
+      assert_eq(findings[3].rule_id, "button-name-missing")
+      assert_eq(findings[3].line, Some(1))
+      assert_eq(findings[3].column, Some(46))
     }
     FindingsWithParseErrors(_, _) =>
       fail("valid HTML should have no parser diagnostics")

@@ -89,11 +89,63 @@ fn collect_findings(
         !has_recognizable_link_name(child, document_root) {
         findings.push(missing_link_name_finding(child, path))
       }
+      if is_button_to_check(child) &&
+        !has_recognizable_button_name(child, document_root) {
+        findings.push(missing_button_name_finding(child, path))
+      }
       collect_findings(child, document_root, path, findings)
     } else {
       collect_findings(child, document_root, parent_path, findings)
     }
     position = position + 1
+  }
+}
+
+///|
+fn is_button_to_check(node : @dom.Node) -> Bool {
+  match node.name() {
+    "button" => true
+    "input" =>
+      match node.attrs().get("type") {
+        Some(Some(type_)) => type_.trim().to_lower() is ("button" | "image")
+        _ => false
+      }
+    _ => false
+  }
+}
+
+///|
+fn has_recognizable_button_name(
+  button : @dom.Node,
+  document_root : @dom.Node,
+) -> Bool {
+  match button.name() {
+    "button" =>
+      has_nonempty_visible_text(button) ||
+      has_nonempty_image_alt(button) ||
+      has_nonempty_attribute(button, "aria-label") ||
+      has_name_from_labelledby(button, document_root) ||
+      has_nonempty_attribute(button, "title") ||
+      has_potential_svg_name_source(button)
+    "input" =>
+      match button.attrs().get("type") {
+        Some(Some(type_)) =>
+          match type_.trim().to_lower() {
+            "button" =>
+              has_nonempty_attribute(button, "value") ||
+              has_nonempty_attribute(button, "aria-label") ||
+              has_name_from_labelledby(button, document_root) ||
+              has_nonempty_attribute(button, "title")
+            "image" =>
+              has_nonempty_attribute(button, "alt") ||
+              has_nonempty_attribute(button, "aria-label") ||
+              has_name_from_labelledby(button, document_root) ||
+              has_nonempty_attribute(button, "title")
+            _ => false
+          }
+        _ => false
+      }
+    _ => false
   }
 }
 
@@ -364,6 +416,18 @@ fn missing_link_name_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "link-name-missing",
     message: "This link has no recognizable accessible name.",
     suggestion: "Add link text, an image with non-empty alt text, aria-label, aria-labelledby, or title.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_button_name_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "button-name-missing",
+    message: "This button has no recognizable accessible name.",
+    suggestion: "Add visible button text, a non-empty value or alt attribute as appropriate, aria-label, aria-labelledby, or title.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

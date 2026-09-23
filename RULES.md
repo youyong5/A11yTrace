@@ -21,3 +21,13 @@ Reports an `<a>` with an `href` attribute when it has no recognizable accessible
 The rule ignores text in `script`, `style`, and `template` descendants. It does not judge whether a link name describes its destination clearly. When none of the accepted HTML, image, ARIA, or title sources supplies a name, it does not yet reliably evaluate SVG naming sources; an anchor containing SVG is therefore conservatively left unreported rather than being asserted unnamed. Links with ordinary text or ARIA labels continue to be recognized normally. This is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm.
 
 The rule is informed by the [W3C ACT Rule: Links have accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/c487ae/).
+
+## `button-name-missing`
+
+Reports native `<button>`, `input[type="button"]`, and `input[type="image"]` controls without a recognizable accessible name. It does not inspect custom `role="button"` elements.
+
+For `<button>`, the rule accepts non-empty visible text, a descendant image with non-empty `alt`, non-empty `aria-label`, an `aria-labelledby` reference to an existing text-bearing element, or non-empty `title`. For `input[type="button"]`, it accepts non-empty `value`, ARIA naming, or `title`; whitespace-only and empty values do not count. For `input[type="image"]`, it accepts non-empty `alt`, ARIA naming, or `title`. `input[type="submit"]` and `input[type="reset"]` have browser default names and are not reported.
+
+As with the link rule, text in `script`, `style`, and `template` descendants does not name a native button. SVG naming sources are not yet reliably evaluated, so SVG-only native buttons are conservatively left unreported. This is a static name-presence check, not a complete Accessible Name algorithm or a WCAG conformance determination.
+
+The rule is informed by the [W3C ACT Rule: Button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/97a4e1/) and [W3C ACT Rule: Image button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/59796f/).
