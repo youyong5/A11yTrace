@@ -27,4 +27,5 @@ description = "Pure HTML accessibility checks for MoonBit projects."
 
 import {
   "bobzhang/html_parser@0.1.8",
+  "moonbitlang/async@0.19.0",
 }
