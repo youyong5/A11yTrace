@@ -17,7 +17,7 @@ jobs:
       - name: Install MoonBit
         uses: hustcer/setup-moonbit@v1.22
         with:
-          version: 0.1.20260920
+          version: 0.10.14+7d59c7ec9
 
       - name: Show toolchain version
         run: moon version --all
