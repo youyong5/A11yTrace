@@ -1,0 +1,40 @@
+# A11yTrace
+
+A11yTrace is a small, pure MoonBit library for statically checking HTML accessibility rules.
+
+## Dependency and use
+
+It uses [`bobzhang/html_parser` 0.1.8](https://github.com/bobzhang/html_parser) to parse HTML into a DOM; A11yTrace does not parse HTML with regular expressions.
+
+```moonbit nocheck
+import {
+  "youyong5/a11ytrace" @a11ytrace,
+}
+
+match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
+  Findings(findings) => println(findings[0].element_path)
+  FindingsWithParseErrors(findings, errors) => {
+    println(findings[0].element_path)
+    println(errors[0].message)
+  }
+  ParseErrors(errors) => println(errors[0].message)
+}
+```
+
+`audit_html` does no file I/O, so callers choose where HTML comes from and how results are presented.
+
+- A static-site generator can audit each rendered page before writing it.
+- A documentation-site build can audit generated guide fragments.
+- A frontend CI job can audit fixture or server-rendered HTML and fail on findings.
+
+## Current rule and boundary
+
+`img-alt-missing` reports an `<img>` that has no `alt` attribute. An explicit `alt=""` is accepted for decorative images, as is any non-empty `alt` value. The rule does not determine whether an image is decorative, whether alternative text is good, or whether a whole document conforms to WCAG.
+
+The parser uses HTML5-style recovery. Recoverable parser diagnostics produce `FindingsWithParseErrors`: the recovered DOM is still checked and diagnostics stay visible. `ParseErrors` is reserved for a parser failure that prevents a DOM audit. Findings include a deterministic CSS-style `element_path`; their optional line and column are source start-tag locations supplied by the parser, and remain absent when the parser has no source position.
+
+See [RULES.md](RULES.md) for the rule rationale and the [W3C Images Tutorial](https://www.w3.org/WAI/tutorials/images/).
+
+## License and attribution
+
+A11yTrace's audit rules and library code are original work licensed under Apache-2.0 (see [LICENSE](LICENSE)). It depends on, but does not copy, `bobzhang/html_parser` 0.1.8, which is also Apache-2.0 licensed.

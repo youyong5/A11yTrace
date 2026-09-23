@@ -1,0 +1,34 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "youyong5/a11ytrace"
+
+// Values
+pub fn audit_html(String) -> AuditResult
+
+// Errors
+
+// Types and methods
+pub(all) enum AuditResult {
+  Findings(Array[Finding])
+  FindingsWithParseErrors(Array[Finding], Array[ParseDiagnostic])
+  ParseErrors(Array[ParseDiagnostic])
+}
+
+pub(all) struct Finding {
+  rule_id : String
+  message : String
+  suggestion : String
+  element_path : String
+  line : Int?
+  column : Int?
+}
+
+pub(all) struct ParseDiagnostic {
+  code : String
+  message : String
+  line : Int?
+  column : Int?
+}
+
+// Type aliases
+
+// Traits
