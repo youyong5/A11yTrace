@@ -1,5 +1,11 @@
 # Rules
 
+## Rule selection
+
+`available_rule_ids()` returns the stable IDs of the rules documented below. `audit_html_with_rules(html, enabled_rule_ids)` runs only those IDs, while `audit_html(html)` continues to run all current rules. An empty selection intentionally runs no rules but keeps any parser diagnostics. Duplicate IDs are treated as one selection, and an unknown ID is returned as `ConfigurationError(UnknownRuleId(id))`; it is never silently ignored.
+
+All selected rules use one recovered DOM and report findings in document order. Rule selection does not implement or imply a conformance profile: in particular, `heading-level-skipped` remains an advisory structural-review rule.
+
 ## `img-alt-missing`
 
 Reports an HTML `<img>` element that omits the `alt` attribute. The suggested repair is to add an appropriate `alt` attribute; `alt=""` is a valid explicit choice for a decorative image.

@@ -35,6 +35,19 @@ pub(all) struct ParseDiagnostic {
 }
 
 ///|
+/// A result produced by `audit_html_with_rules`.
+pub(all) enum ConfiguredAuditResult {
+  Audited(AuditResult)
+  ConfigurationError(RuleConfigurationError)
+}
+
+///|
+/// An invalid rule-selection configuration.
+pub(all) enum RuleConfigurationError {
+  UnknownRuleId(String)
+}
+
+///|
 /// Audit an HTML fragment with the rules currently implemented by A11yTrace.
 ///
 /// This is a pure operation: it performs no file I/O and can be used by a
@@ -42,6 +55,36 @@ pub(all) struct ParseDiagnostic {
 /// diagnostics returns `FindingsWithParseErrors`, so ordinary HTML5 recovery
 /// does not hide rule findings. A parser failure returns `ParseErrors`.
 pub fn audit_html(html : String) -> AuditResult {
+  audit_html_with_enabled_rules(html, all_rule_ids())
+}
+
+///|
+/// Return the stable IDs accepted by `audit_html_with_rules`.
+pub fn available_rule_ids() -> Array[String] {
+  all_rule_ids()
+}
+
+///|
+/// Audit an HTML fragment with only the selected rule IDs.
+///
+/// An empty array runs no rules but still returns parser diagnostics. Repeated
+/// IDs are treated as one selection. An unknown ID returns
+/// `ConfigurationError` before parsing.
+pub fn audit_html_with_rules(
+  html : String,
+  enabled_rule_ids : Array[String],
+) -> ConfiguredAuditResult {
+  match unknown_rule_id(enabled_rule_ids) {
+    Some(rule_id) => ConfigurationError(UnknownRuleId(rule_id))
+    None => Audited(audit_html_with_enabled_rules(html, enabled_rule_ids))
+  }
+}
+
+///|
+fn audit_html_with_enabled_rules(
+  html : String,
+  enabled_rule_ids : Array[String],
+) -> AuditResult {
   let parsed = @html_parser.parse_fragment(
     html,
     collect_errors=true,
@@ -50,7 +93,16 @@ pub fn audit_html(html : String) -> AuditResult {
     error => return ParseErrors([parse_failure(error)])
   }
   let findings = []
-  ignore(collect_findings(parsed.root, parsed.root, "", findings, None))
+  ignore(
+    collect_findings(
+      parsed.root,
+      parsed.root,
+      "",
+      findings,
+      enabled_rule_ids,
+      None,
+    ),
+  )
   let diagnostics = parsed.errors.map(parse_diagnostic)
   if diagnostics.is_empty() {
     Findings(findings)
@@ -60,11 +112,51 @@ pub fn audit_html(html : String) -> AuditResult {
 }
 
 ///|
+fn all_rule_ids() -> Array[String] {
+  [
+    "img-alt-missing", "form-control-name-missing", "link-name-missing", "button-name-missing",
+    "heading-level-skipped", "heading-name-missing",
+  ]
+}
+
+///|
+fn unknown_rule_id(rule_ids : Array[String]) -> String? {
+  for rule_id in rule_ids {
+    if !is_available_rule_id(rule_id) {
+      return Some(rule_id)
+    }
+  }
+  None
+}
+
+///|
+fn is_available_rule_id(rule_id : String) -> Bool {
+  rule_id
+  is ("img-alt-missing"
+  | "form-control-name-missing"
+  | "link-name-missing"
+  | "button-name-missing"
+  | "heading-level-skipped"
+  | "heading-name-missing")
+}
+
+///|
+fn is_rule_enabled(enabled_rule_ids : Array[String], rule_id : String) -> Bool {
+  for enabled_rule_id in enabled_rule_ids {
+    if enabled_rule_id == rule_id {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn collect_findings(
   node : @dom.Node,
   document_root : @dom.Node,
   parent_path : String,
   findings : Array[Finding],
+  enabled_rule_ids : Array[String],
   previous_heading_level : Int?,
 ) -> Int? {
   let children = node.children()
@@ -80,39 +172,47 @@ fn collect_findings(
       } else {
         "\{parent_path} > \{name}:nth-of-type(\{occurrence})"
       }
-      if name == "img" && child.attrs().get("alt") is None {
+      if is_rule_enabled(enabled_rule_ids, "img-alt-missing") &&
+        name == "img" &&
+        child.attrs().get("alt") is None {
         findings.push(missing_alt_finding(child, path))
       }
-      if is_form_control_to_check(child) &&
+      if is_rule_enabled(enabled_rule_ids, "form-control-name-missing") &&
+        is_form_control_to_check(child) &&
         !has_recognizable_form_control_name(child, document_root) {
         findings.push(missing_form_control_name_finding(child, path))
       }
-      if is_link_to_check(child) &&
+      if is_rule_enabled(enabled_rule_ids, "link-name-missing") &&
+        is_link_to_check(child) &&
         !has_recognizable_link_name(child, document_root) {
         findings.push(missing_link_name_finding(child, path))
       }
-      if is_button_to_check(child) &&
+      if is_rule_enabled(enabled_rule_ids, "button-name-missing") &&
+        is_button_to_check(child) &&
         !has_recognizable_button_name(child, document_root) {
         findings.push(missing_button_name_finding(child, path))
       }
       match heading_level(child) {
         Some(level) => {
-          if last_heading_level is Some(previous) && level >= previous + 2 {
+          if is_rule_enabled(enabled_rule_ids, "heading-level-skipped") &&
+            last_heading_level is Some(previous) &&
+            level >= previous + 2 {
             findings.push(skipped_heading_level_finding(child, path))
           }
           last_heading_level = Some(level)
-          if !has_recognizable_heading_name(child, document_root) {
+          if is_rule_enabled(enabled_rule_ids, "heading-name-missing") &&
+            !has_recognizable_heading_name(child, document_root) {
             findings.push(missing_heading_name_finding(child, path))
           }
         }
         None => ()
       }
       last_heading_level = collect_findings(
-        child, document_root, path, findings, last_heading_level,
+        child, document_root, path, findings, enabled_rule_ids, last_heading_level,
       )
     } else {
       last_heading_level = collect_findings(
-        child, document_root, parent_path, findings, last_heading_level,
+        child, document_root, parent_path, findings, enabled_rule_ids, last_heading_level,
       )
     }
     position = position + 1

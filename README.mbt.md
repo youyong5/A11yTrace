@@ -23,6 +23,23 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 
 `audit_html` does no file I/O, so callers choose where HTML comes from and how results are presented.
 
+For a focused check, `available_rule_ids()` returns the accepted IDs in stable order and `audit_html_with_rules(html, enabled_rule_ids)` runs only the requested rules. `audit_html(html)` still runs every current rule. An empty selection runs no rules while retaining parser diagnostics; an unknown ID returns `ConfigurationError(UnknownRuleId(id))` rather than being ignored. Repeated IDs do not duplicate findings.
+
+```moonbit nocheck
+let selected = ["img-alt-missing", "heading-level-skipped"]
+
+match @a11ytrace.audit_html_with_rules(html, selected) {
+  Audited(Findings(findings)) => ()
+  Audited(FindingsWithParseErrors(findings, errors)) => ()
+  Audited(ParseErrors(errors)) => ()
+  ConfigurationError(UnknownRuleId(rule_id)) =>
+    // Correct the rule ID before running an audit.
+    ()
+}
+```
+
+`heading-level-skipped` is a suggestion for structural review, so it can be useful to select it independently in a content-build check. Selection does not change the caller-provided array, and all selected rules share one parsed DOM; findings remain in document order.
+
 - A static-site generator can audit each rendered page before writing it.
 - A documentation-site build can audit generated guide fragments.
 - A frontend CI job can audit fixture or server-rendered HTML and fail on findings.

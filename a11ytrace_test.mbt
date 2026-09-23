@@ -511,3 +511,115 @@ test "keeps all rules and heading findings in document order" {
     ParseErrors(_) => fail("valid HTML should be audited")
   }
 }
+
+///|
+test "lists rule IDs and keeps the default audit behavior" {
+  let rule_ids = @a11ytrace.available_rule_ids()
+  assert_eq(rule_ids.length(), 6)
+  assert_eq(rule_ids[0], "img-alt-missing")
+  assert_eq(rule_ids[4], "heading-level-skipped")
+  assert_eq(rule_ids[5], "heading-name-missing")
+  rule_ids[0] = "not-a-rule"
+  let fresh_rule_ids = @a11ytrace.available_rule_ids()
+  assert_eq(fresh_rule_ids[0], "img-alt-missing")
+  let html = "<img src=\"x.png\"><input>"
+  match @a11ytrace.audit_html(html) {
+    Findings(default_findings) =>
+      match @a11ytrace.audit_html_with_rules(html, fresh_rule_ids) {
+        Audited(Findings(configured_findings)) => {
+          assert_eq(configured_findings.length(), default_findings.length())
+          assert_eq(configured_findings[0].rule_id, "img-alt-missing")
+          assert_eq(configured_findings[1].rule_id, "form-control-name-missing")
+        }
+        Audited(_) =>
+          fail("valid HTML should have findings without diagnostics")
+        ConfigurationError(_) => fail("known rule IDs must be accepted")
+      }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "audits only selected rules without changing the caller selection" {
+  let selected_rule_ids = ["form-control-name-missing"]
+  match
+    @a11ytrace.audit_html_with_rules(
+      "<img src=\"x.png\"><input><button></button>", selected_rule_ids,
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+    }
+    Audited(_) => fail("valid HTML should have findings without diagnostics")
+    ConfigurationError(_) => fail("known rule IDs must be accepted")
+  }
+  assert_eq(selected_rule_ids.length(), 1)
+  assert_eq(selected_rule_ids[0], "form-control-name-missing")
+}
+
+///|
+test "deduplicates selected rules and preserves document order" {
+  let selected_rule_ids = [
+    "heading-name-missing", "img-alt-missing", "button-name-missing", "img-alt-missing",
+  ]
+  match
+    @a11ytrace.audit_html_with_rules(
+      "<button></button><h2></h2><img src=\"x.png\">", selected_rule_ids,
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[1].rule_id, "heading-name-missing")
+      assert_eq(findings[2].rule_id, "img-alt-missing")
+    }
+    Audited(_) => fail("valid HTML should have findings without diagnostics")
+    ConfigurationError(_) => fail("known rule IDs must be accepted")
+  }
+  assert_eq(selected_rule_ids.length(), 4)
+  assert_eq(selected_rule_ids[3], "img-alt-missing")
+}
+
+///|
+test "keeps parser diagnostics when the selected rule list is empty" {
+  match @a11ytrace.audit_html_with_rules("<img src=\"x.png\"></span>", []) {
+    Audited(FindingsWithParseErrors(findings, errors)) => {
+      assert_eq(findings.length(), 0)
+      assert_eq(errors.length(), 1)
+      assert_eq(errors[0].code, "unexpected-end-tag")
+    }
+    Audited(_) => fail("recoverable HTML diagnostics must be preserved")
+    ConfigurationError(_) => fail("an empty selection is valid")
+  }
+}
+
+///|
+test "keeps default findings with recoverable parser diagnostics" {
+  let html = "<img src=\"x.png\"></span>"
+  match @a11ytrace.audit_html(html) {
+    FindingsWithParseErrors(default_findings, default_errors) =>
+      match
+        @a11ytrace.audit_html_with_rules(html, @a11ytrace.available_rule_ids()) {
+        Audited(FindingsWithParseErrors(configured_findings, configured_errors)) => {
+          assert_eq(configured_findings.length(), default_findings.length())
+          assert_eq(configured_findings[0].rule_id, "img-alt-missing")
+          assert_eq(configured_errors.length(), default_errors.length())
+          assert_eq(configured_errors[0].code, "unexpected-end-tag")
+        }
+        Audited(_) => fail("recoverable diagnostics must be preserved")
+        ConfigurationError(_) => fail("known rule IDs must be accepted")
+      }
+    Findings(_) => fail("recoverable HTML must retain diagnostics")
+    ParseErrors(_) => fail("recoverable HTML should be audited")
+  }
+}
+
+///|
+test "reports an unknown selected rule ID as a configuration error" {
+  match @a11ytrace.audit_html_with_rules("</span>", ["not-a-rule"]) {
+    ConfigurationError(UnknownRuleId(rule_id)) =>
+      assert_eq(rule_id, "not-a-rule")
+    Audited(_) => fail("unknown rule IDs must not be ignored")
+  }
+}
