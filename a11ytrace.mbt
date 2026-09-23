@@ -50,7 +50,7 @@ pub fn audit_html(html : String) -> AuditResult {
     error => return ParseErrors([parse_failure(error)])
   }
   let findings = []
-  collect_missing_alt_findings(parsed.root, "", findings)
+  collect_findings(parsed.root, parsed.root, "", findings)
   let diagnostics = parsed.errors.map(parse_diagnostic)
   if diagnostics.is_empty() {
     Findings(findings)
@@ -60,8 +60,9 @@ pub fn audit_html(html : String) -> AuditResult {
 }
 
 ///|
-fn collect_missing_alt_findings(
+fn collect_findings(
   node : @dom.Node,
+  document_root : @dom.Node,
   parent_path : String,
   findings : Array[Finding],
 ) -> Unit {
@@ -80,11 +81,153 @@ fn collect_missing_alt_findings(
       if name == "img" && child.attrs().get("alt") is None {
         findings.push(missing_alt_finding(child, path))
       }
-      collect_missing_alt_findings(child, path, findings)
+      if is_form_control_to_check(child) &&
+        !has_recognizable_form_control_name(child, document_root) {
+        findings.push(missing_form_control_name_finding(child, path))
+      }
+      collect_findings(child, document_root, path, findings)
     } else {
-      collect_missing_alt_findings(child, parent_path, findings)
+      collect_findings(child, document_root, parent_path, findings)
     }
     position = position + 1
+  }
+}
+
+///|
+fn is_form_control_to_check(node : @dom.Node) -> Bool {
+  match node.name() {
+    "select" | "textarea" => true
+    "input" =>
+      match node.attrs().get("type") {
+        Some(Some(type_)) => !is_excluded_input_type(type_)
+        _ => true
+      }
+    _ => false
+  }
+}
+
+///|
+fn is_excluded_input_type(type_ : String) -> Bool {
+  match type_.trim().to_lower() {
+    "hidden" | "submit" | "reset" | "button" | "image" => true
+    _ => false
+  }
+}
+
+///|
+fn has_recognizable_form_control_name(
+  control : @dom.Node,
+  document_root : @dom.Node,
+) -> Bool {
+  has_nonempty_attribute(control, "aria-label") ||
+  has_nonempty_attribute(control, "title") ||
+  has_name_from_labelledby(control, document_root) ||
+  has_explicit_label(control, document_root) ||
+  has_wrapping_label(control)
+}
+
+///|
+fn has_nonempty_attribute(node : @dom.Node, name : String) -> Bool {
+  match node.attrs().get(name) {
+    Some(Some(value)) => !value.trim().is_empty()
+    _ => false
+  }
+}
+
+///|
+fn has_name_from_labelledby(
+  control : @dom.Node,
+  document_root : @dom.Node,
+) -> Bool {
+  match control.attrs().get("aria-labelledby") {
+    Some(Some(value)) => {
+      let normalized = value
+        .replace_all(old="\t", new=" ")
+        .replace_all(old="\n", new=" ")
+        .replace_all(old="\r", new=" ")
+        .replace_all(old="\u{000C}", new=" ")
+      for reference in normalized.split(" ") {
+        let id = reference.trim()
+        if !id.is_empty() && element_with_id_has_text(document_root, id) {
+          return true
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
+fn element_with_id_has_text(node : @dom.Node, id : StringView) -> Bool {
+  if node.kind() is @dom.Element &&
+    node.attrs().get("id") is Some(Some(node_id)) &&
+    node_id[:] == id &&
+    !node.text().trim().is_empty() {
+    return true
+  }
+  for child in node.children() {
+    if element_with_id_has_text(child, id) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn has_explicit_label(control : @dom.Node, document_root : @dom.Node) -> Bool {
+  match control.attrs().get("id") {
+    Some(Some(id)) if !id.trim().is_empty() =>
+      label_for_id_has_text(document_root, id)
+    _ => false
+  }
+}
+
+///|
+fn label_for_id_has_text(node : @dom.Node, id : String) -> Bool {
+  if node.kind() is @dom.Element &&
+    node.name() == "label" &&
+    node.attrs().get("for") is Some(Some(for_id)) &&
+    for_id == id &&
+    !node.text().trim().is_empty() {
+    return true
+  }
+  for child in node.children() {
+    if label_for_id_has_text(child, id) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn has_wrapping_label(control : @dom.Node) -> Bool {
+  let mut ancestor = control.parent()
+  while ancestor is Some(node) {
+    if node.kind() is @dom.Element &&
+      node.name() == "label" &&
+      !node.text().trim().is_empty() &&
+      wrapping_label_applies_to_control(node, control) {
+      return true
+    }
+    ancestor = node.parent()
+  }
+  false
+}
+
+///|
+fn wrapping_label_applies_to_control(
+  label : @dom.Node,
+  control : @dom.Node,
+) -> Bool {
+  match label.attrs().get("for") {
+    None => true
+    Some(Some(for_id)) =>
+      match control.attrs().get("id") {
+        Some(Some(control_id)) => for_id == control_id
+        _ => false
+      }
+    Some(None) => false
   }
 }
 
@@ -123,6 +266,21 @@ fn missing_alt_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "img-alt-missing",
     message: "This image has no alt attribute.",
     suggestion: "Add an alt attribute; use alt=\"\" only when the image is decorative.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_form_control_name_finding(
+  node : @dom.Node,
+  path : String,
+) -> Finding {
+  {
+    rule_id: "form-control-name-missing",
+    message: "This form control has no recognizable accessible name.",
+    suggestion: "Add visible label text or a non-empty aria-label, aria-labelledby reference, or title.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

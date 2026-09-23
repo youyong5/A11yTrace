@@ -31,6 +31,21 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 
 `img-alt-missing` reports an `<img>` that has no `alt` attribute. An explicit `alt=""` is accepted for decorative images, as is any non-empty `alt` value. The rule does not determine whether an image is decorative, whether alternative text is good, or whether a whole document conforms to WCAG.
 
+`form-control-name-missing` reports unnamed `<input>`, `<select>`, and `<textarea>` controls, excluding hidden and button-like input types. It recognizes text-bearing labels, non-empty ARIA names, and `title` as a fallback; it does not implement the complete browser Accessible Name algorithm.
+
+For example, both rules can be reported from one fragment:
+
+```moonbit nocheck
+match @a11ytrace.audit_html("<img src=\"chart.svg\"><input placeholder=\"Email\">") {
+  Findings(findings) => {
+    // findings[0].rule_id == "img-alt-missing"
+    // findings[1].rule_id == "form-control-name-missing"
+  }
+  FindingsWithParseErrors(findings, errors) => ()
+  ParseErrors(errors) => ()
+}
+```
+
 The parser uses HTML5-style recovery. Recoverable parser diagnostics produce `FindingsWithParseErrors`: the recovered DOM is still checked and diagnostics stay visible. `ParseErrors` is reserved for a parser failure that prevents a DOM audit. Findings include a deterministic CSS-style `element_path`; their optional line and column are source start-tag locations supplied by the parser, and remain absent when the parser has no source position.
 
 See [RULES.md](RULES.md) for the rule rationale and the [W3C Images Tutorial](https://www.w3.org/WAI/tutorials/images/).

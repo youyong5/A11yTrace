@@ -91,3 +91,119 @@ test "keeps findings alongside recoverable parser diagnostics" {
     ParseErrors(_) => fail("recoverable HTML should still be audited")
   }
 }
+
+///|
+test "accepts explicit, wrapping, aria, and title form control names" {
+  let html = "<label for=\"email\">Email</label><input id=\"email\">" +
+    "<label>Search <input></label>" +
+    "<input aria-label=\"Account number\">" +
+    "<span id=\"single\">Single label</span><input aria-labelledby=\"single\">" +
+    "<span id=\"first\">First</span><span id=\"last\">Last</span>" +
+    "<input aria-labelledby=\"first\tlast\">" +
+    "<textarea title=\"Notes\"></textarea>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports placeholder-only and empty or invalid label references" {
+  let html = "<input placeholder=\"Email\">" +
+    "<label for=\"empty\"> </label><input id=\"empty\">" +
+    "<input aria-label=\"\">" +
+    "<input aria-labelledby=\"missing\">" +
+    "<span id=\"blank\"> </span><input aria-labelledby=\"blank\">"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 5)
+      for finding in findings {
+        assert_eq(finding.rule_id, "form-control-name-missing")
+      }
+      assert_eq(findings[0].element_path, "input:nth-of-type(1)")
+      assert_eq(findings[4].element_path, "input:nth-of-type(5)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "does not let unrelated explicit labels name another control" {
+  match
+    @a11ytrace.audit_html(
+      "<label for=\"other\">Name <input id=\"name\"></label>",
+    ) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+      assert_eq(
+        findings[0].element_path,
+        "label:nth-of-type(1) > input:nth-of-type(1)",
+      )
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+  match
+    @a11ytrace.audit_html(
+      "<label for=\"name\">Name</label><input id=\"other\">",
+    ) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+      assert_eq(findings[0].element_path, "input:nth-of-type(1)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "excludes hidden and button-like inputs" {
+  let html = "<input type=\"hidden\"><input type=\"submit\"><input type=\"reset\">" +
+    "<input type=\"button\"><input type=\"image\">"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports unnamed select textarea and multiple controls in document order" {
+  let html = "<select></select><input aria-label=\"Named\"><textarea></textarea><input>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].element_path, "select:nth-of-type(1)")
+      assert_eq(findings[1].element_path, "textarea:nth-of-type(1)")
+      assert_eq(findings[2].element_path, "input:nth-of-type(2)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports image and form control findings together in document order" {
+  match @a11ytrace.audit_html("<img src=\"x.png\"><input>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[1].line, Some(1))
+      assert_eq(findings[1].column, Some(18))
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
