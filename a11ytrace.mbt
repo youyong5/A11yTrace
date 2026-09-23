@@ -85,12 +85,83 @@ fn collect_findings(
         !has_recognizable_form_control_name(child, document_root) {
         findings.push(missing_form_control_name_finding(child, path))
       }
+      if is_link_to_check(child) &&
+        !has_recognizable_link_name(child, document_root) {
+        findings.push(missing_link_name_finding(child, path))
+      }
       collect_findings(child, document_root, path, findings)
     } else {
       collect_findings(child, document_root, parent_path, findings)
     }
     position = position + 1
   }
+}
+
+///|
+fn is_link_to_check(node : @dom.Node) -> Bool {
+  node.name() == "a" && node.attrs().get("href") is Some(_)
+}
+
+///|
+fn has_recognizable_link_name(
+  link : @dom.Node,
+  document_root : @dom.Node,
+) -> Bool {
+  has_nonempty_visible_text(link) ||
+  has_nonempty_image_alt(link) ||
+  has_nonempty_attribute(link, "aria-label") ||
+  has_name_from_labelledby(link, document_root) ||
+  has_nonempty_attribute(link, "title") ||
+  has_potential_svg_name_source(link)
+}
+
+///|
+fn has_nonempty_visible_text(node : @dom.Node) -> Bool {
+  if node.kind() is @dom.Text {
+    return !node.data().trim().is_empty()
+  }
+  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
+    return false
+  }
+  for child in node.children() {
+    if has_nonempty_visible_text(child) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn is_non_name_text_element(name : String) -> Bool {
+  name is ("script" | "style" | "template")
+}
+
+///|
+fn has_nonempty_image_alt(node : @dom.Node) -> Bool {
+  if node.kind() is @dom.Element &&
+    node.name() == "img" &&
+    has_nonempty_attribute(node, "alt") {
+    return true
+  }
+  for child in node.children() {
+    if has_nonempty_image_alt(child) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn has_potential_svg_name_source(node : @dom.Node) -> Bool {
+  if node.kind() is @dom.Element && node.name() == "svg" {
+    return true
+  }
+  for child in node.children() {
+    if has_potential_svg_name_source(child) {
+      return true
+    }
+  }
+  false
 }
 
 ///|
@@ -163,7 +234,7 @@ fn element_with_id_has_text(node : @dom.Node, id : StringView) -> Bool {
   if node.kind() is @dom.Element &&
     node.attrs().get("id") is Some(Some(node_id)) &&
     node_id[:] == id &&
-    !node.text().trim().is_empty() {
+    has_nonempty_visible_text(node) {
     return true
   }
   for child in node.children() {
@@ -189,7 +260,7 @@ fn label_for_id_has_text(node : @dom.Node, id : String) -> Bool {
     node.name() == "label" &&
     node.attrs().get("for") is Some(Some(for_id)) &&
     for_id == id &&
-    !node.text().trim().is_empty() {
+    has_nonempty_visible_text(node) {
     return true
   }
   for child in node.children() {
@@ -206,7 +277,7 @@ fn has_wrapping_label(control : @dom.Node) -> Bool {
   while ancestor is Some(node) {
     if node.kind() is @dom.Element &&
       node.name() == "label" &&
-      !node.text().trim().is_empty() &&
+      has_nonempty_visible_text(node) &&
       wrapping_label_applies_to_control(node, control) {
       return true
     }
@@ -281,6 +352,18 @@ fn missing_form_control_name_finding(
     rule_id: "form-control-name-missing",
     message: "This form control has no recognizable accessible name.",
     suggestion: "Add visible label text or a non-empty aria-label, aria-labelledby reference, or title.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_link_name_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "link-name-missing",
+    message: "This link has no recognizable accessible name.",
+    suggestion: "Add link text, an image with non-empty alt text, aria-label, aria-labelledby, or title.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

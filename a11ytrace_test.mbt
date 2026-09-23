@@ -207,3 +207,89 @@ test "reports image and form control findings together in document order" {
     ParseErrors(_) => fail("valid HTML should be audited")
   }
 }
+
+///|
+test "accepts link text image alt and explicit name attributes" {
+  let html = "<a href=\"/text\"><span>Read more</span></a>" +
+    "<a href=\"/image\"><img src=\"cover.png\" alt=\"Book cover\"></a>" +
+    "<a href=\"/image-and-text\"><img src=\"icon.png\" alt=\"\"><span>Settings</span></a>" +
+    "<a href=\"/aria\" aria-label=\"Profile\"></a>" +
+    "<span id=\"downloads\">Downloads</span><a href=\"/files\" aria-labelledby=\"downloads\"></a>" +
+    "<a href=\"/help\" title=\"Help centre\"></a>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports empty links and decorative-image-only links" {
+  let html = "<a href=\"/\"></a><a href=\"/space\">  </a>" +
+    "<a href=\"/decorative\"><img src=\"icon.png\" alt=\"\"></a>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      for finding in findings {
+        assert_eq(finding.rule_id, "link-name-missing")
+      }
+      assert_eq(findings[0].element_path, "a:nth-of-type(1)")
+      assert_eq(findings[2].element_path, "a:nth-of-type(3)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "does not treat script style or template text as a link name" {
+  let html = "<a href=\"/script\"><script>Ignored script text</script></a>" +
+    "<a href=\"/style\"><style>.link { color: red; }</style></a>" +
+    "<a href=\"/template\"><template>Ignored template text</template></a>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      for finding in findings {
+        assert_eq(finding.rule_id, "link-name-missing")
+      }
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "does not audit anchors without href and conservatively skips svg links" {
+  match
+    @a11ytrace.audit_html(
+      "<a>Not a link</a><a href=\"/icon\"><svg></svg></a>" +
+      "<a href=\"/named\" aria-label=\"Menu\"><svg></svg></a>" +
+      "<a href=\"/text\"><svg></svg>Help</a>",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "keeps image form and link findings in document order" {
+  match
+    @a11ytrace.audit_html("<img src=\"x.png\"><input><a href=\"/empty\"></a>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[2].rule_id, "link-name-missing")
+      assert_eq(findings[2].line, Some(1))
+      assert_eq(findings[2].column, Some(25))
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}

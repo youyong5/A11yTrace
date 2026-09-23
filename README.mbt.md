@@ -33,6 +33,8 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 
 `form-control-name-missing` reports unnamed `<input>`, `<select>`, and `<textarea>` controls, excluding hidden and button-like input types. It recognizes text-bearing labels, non-empty ARIA names, and `title` as a fallback; it does not implement the complete browser Accessible Name algorithm.
 
+`link-name-missing` reports an `<a href>` without recognizable text, non-empty image alt text, ARIA name, or fallback title. It ignores script, style, and template text. It checks presence of a name, not whether the destination is described clearly; when no supported source is present, SVG-containing links are conservatively left unreported until SVG name sources are supported.
+
 For example, both rules can be reported from one fragment:
 
 ```moonbit nocheck
@@ -40,6 +42,18 @@ match @a11ytrace.audit_html("<img src=\"chart.svg\"><input placeholder=\"Email\"
   Findings(findings) => {
     // findings[0].rule_id == "img-alt-missing"
     // findings[1].rule_id == "form-control-name-missing"
+  }
+  FindingsWithParseErrors(findings, errors) => ()
+  ParseErrors(errors) => ()
+}
+```
+
+All three current rules can be reported in document order:
+
+```moonbit nocheck
+match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\"></a>") {
+  Findings(findings) => {
+    // img-alt-missing, form-control-name-missing, link-name-missing
   }
   FindingsWithParseErrors(findings, errors) => ()
   ParseErrors(errors) => ()
