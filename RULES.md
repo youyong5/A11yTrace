@@ -31,3 +31,15 @@ For `<button>`, the rule accepts non-empty visible text, a descendant image with
 As with the link rule, text in `script`, `style`, and `template` descendants does not name a native button. SVG naming sources are not yet reliably evaluated, so SVG-only native buttons are conservatively left unreported. This is a static name-presence check, not a complete Accessible Name algorithm or a WCAG conformance determination.
 
 The rule is informed by the [W3C ACT Rule: Button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/97a4e1/) and [W3C ACT Rule: Image button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/59796f/).
+
+## `heading-level-skipped`
+
+Walks native `h1` through `h6` in document order. The first heading may use any level. A later heading produces a suggestion only when it jumps downward by two or more levels from the preceding native heading, such as `h2` to `h4`. Moving upward, repeating a level, and moving down one level do not produce a finding.
+
+The finding says “建议检查标题层级” because this is a structural review prompt, not a determination of WCAG non-conformance. It does not infer headings from visually styled text and does not inspect headings inside HTML template content.
+
+## `heading-name-missing`
+
+Reports empty native `h1` through `h6`. It accepts non-empty ordinary descendant text, a descendant image with non-empty `alt`, non-empty `aria-label`, or an `aria-labelledby` reference to an existing text-bearing element. Script, style, and template text does not count. As with link and button checks, SVG naming sources are not yet reliably evaluated, so SVG-only headings are conservatively left unreported.
+
+These rules are informed by the [W3C Headings Tutorial](https://www.w3.org/WAI/tutorials/page-structure/headings/). They are focused static checks, not a complete browser Accessible Name algorithm or a WCAG conformance determination.

@@ -413,3 +413,101 @@ test "keeps all four rule findings in document order" {
     ParseErrors(_) => fail("valid HTML should be audited")
   }
 }
+
+///|
+test "only reports downward native heading level skips" {
+  match
+    @a11ytrace.audit_html(
+      "<h3>First heading</h3><h2>Back up</h2><h2>Same</h2><h3>One down</h3>",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+  match @a11ytrace.audit_html("<h2>Section</h2><h4>Nested section</h4>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "heading-level-skipped")
+      assert_eq(findings[0].element_path, "h4:nth-of-type(1)")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "recognizes heading text aria and image alt names" {
+  let html = "<h1>Title</h1><h2 aria-label=\"Overview\"></h2>" +
+    "<span id=\"status\">Status</span><h3 aria-labelledby=\"status\"></h3>" +
+    "<h4><img src=\"chart.png\" alt=\"Sales chart\"></h4>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "reports empty headings and ignores template headings" {
+  match
+    @a11ytrace.audit_html("<h1> </h1><h2><img src=\"icon.png\" alt=\"\"></h2>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "heading-name-missing")
+      assert_eq(findings[1].rule_id, "heading-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+  match
+    @a11ytrace.audit_html(
+      "<h2>Visible</h2><template><h4>Template only</h4></template><h3>Next</h3>",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "does not use inactive descendant text for heading names" {
+  let html = "<h1><script>Ignored</script></h1>" +
+    "<h2><style>.heading { color: red; }</style></h2>" +
+    "<h3><template>Ignored</template></h3>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "heading-name-missing")
+      assert_eq(findings[1].rule_id, "heading-name-missing")
+      assert_eq(findings[2].rule_id, "heading-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}
+
+///|
+test "keeps all rules and heading findings in document order" {
+  let html = "<img src=\"x.png\"><input><a href=\"/empty\"></a><button></button>" +
+    "<h2>Section</h2><h4></h4>"
+  match @a11ytrace.audit_html(html) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 6)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[2].rule_id, "link-name-missing")
+      assert_eq(findings[3].rule_id, "button-name-missing")
+      assert_eq(findings[4].rule_id, "heading-level-skipped")
+      assert_eq(findings[5].rule_id, "heading-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid HTML should have no parser diagnostics")
+    ParseErrors(_) => fail("valid HTML should be audited")
+  }
+}

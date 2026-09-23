@@ -50,7 +50,7 @@ pub fn audit_html(html : String) -> AuditResult {
     error => return ParseErrors([parse_failure(error)])
   }
   let findings = []
-  collect_findings(parsed.root, parsed.root, "", findings)
+  ignore(collect_findings(parsed.root, parsed.root, "", findings, None))
   let diagnostics = parsed.errors.map(parse_diagnostic)
   if diagnostics.is_empty() {
     Findings(findings)
@@ -65,8 +65,10 @@ fn collect_findings(
   document_root : @dom.Node,
   parent_path : String,
   findings : Array[Finding],
-) -> Unit {
+  previous_heading_level : Int?,
+) -> Int? {
   let children = node.children()
+  let mut last_heading_level = previous_heading_level
   let mut position = 0
   while position < children.length() {
     let child = children[position]
@@ -93,12 +95,54 @@ fn collect_findings(
         !has_recognizable_button_name(child, document_root) {
         findings.push(missing_button_name_finding(child, path))
       }
-      collect_findings(child, document_root, path, findings)
+      match heading_level(child) {
+        Some(level) => {
+          if last_heading_level is Some(previous) && level >= previous + 2 {
+            findings.push(skipped_heading_level_finding(child, path))
+          }
+          last_heading_level = Some(level)
+          if !has_recognizable_heading_name(child, document_root) {
+            findings.push(missing_heading_name_finding(child, path))
+          }
+        }
+        None => ()
+      }
+      last_heading_level = collect_findings(
+        child, document_root, path, findings, last_heading_level,
+      )
     } else {
-      collect_findings(child, document_root, parent_path, findings)
+      last_heading_level = collect_findings(
+        child, document_root, parent_path, findings, last_heading_level,
+      )
     }
     position = position + 1
   }
+  last_heading_level
+}
+
+///|
+fn heading_level(node : @dom.Node) -> Int? {
+  match node.name() {
+    "h1" => Some(1)
+    "h2" => Some(2)
+    "h3" => Some(3)
+    "h4" => Some(4)
+    "h5" => Some(5)
+    "h6" => Some(6)
+    _ => None
+  }
+}
+
+///|
+fn has_recognizable_heading_name(
+  heading : @dom.Node,
+  document_root : @dom.Node,
+) -> Bool {
+  has_nonempty_visible_text(heading) ||
+  has_nonempty_image_alt(heading) ||
+  has_nonempty_attribute(heading, "aria-label") ||
+  has_name_from_labelledby(heading, document_root) ||
+  has_potential_svg_name_source(heading)
 }
 
 ///|
@@ -428,6 +472,30 @@ fn missing_button_name_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "button-name-missing",
     message: "This button has no recognizable accessible name.",
     suggestion: "Add visible button text, a non-empty value or alt attribute as appropriate, aria-label, aria-labelledby, or title.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn skipped_heading_level_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "heading-level-skipped",
+    message: "建议检查标题层级：this heading skips one or more levels from the preceding heading.",
+    suggestion: "Review whether this heading level should follow the preceding native heading.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_heading_name_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "heading-name-missing",
+    message: "This heading has no recognizable accessible name.",
+    suggestion: "Add heading text, an image with non-empty alt text, aria-label, or aria-labelledby.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

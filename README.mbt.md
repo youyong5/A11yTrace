@@ -37,6 +37,8 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 
 `button-name-missing` reports unnamed native `<button>`, `input[type="button"]`, and `input[type="image"]`; custom `role="button"` is outside this rule. It recognizes supported native text, image alt, value, ARIA, and title sources as appropriate, while leaving SVG-only native buttons unreported until SVG name sources are supported. It is a static name-presence check, not a WCAG conformance conclusion.
 
+`heading-level-skipped` suggests reviewing a native heading that jumps down two or more levels from the preceding heading; the first heading may start at any level. `heading-name-missing` reports empty native headings unless supported text, image alt, or ARIA naming is present. Neither rule infers headings from visual styling or implements a complete browser Accessible Name algorithm.
+
 For example, both rules can be reported from one fragment:
 
 ```moonbit nocheck
@@ -50,12 +52,12 @@ match @a11ytrace.audit_html("<img src=\"chart.svg\"><input placeholder=\"Email\"
 }
 ```
 
-All four current rules can be reported in document order:
+Current rules can be reported in document order:
 
 ```moonbit nocheck
-match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\"></a><button></button>") {
+match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\"></a><button></button><h2>Section</h2><h4></h4>") {
   Findings(findings) => {
-    // img-alt-missing, form-control-name-missing, link-name-missing, button-name-missing
+    // image, form, link, button, heading-level, and heading-name findings
   }
   FindingsWithParseErrors(findings, errors) => ()
   ParseErrors(errors) => ()
