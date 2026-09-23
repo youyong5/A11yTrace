@@ -74,9 +74,40 @@ pub fn audit_html_with_rules(
   html : String,
   enabled_rule_ids : Array[String],
 ) -> ConfiguredAuditResult {
+  audit_html_with_selected_rules(html, enabled_rule_ids)
+}
+
+///|
+/// Audit an HTML fragment with every current A11yTrace rule.
+///
+/// This is useful for a component or generated template that is not wrapped
+/// in a complete document. Labels and ARIA references are resolved only
+/// within the supplied fragment.
+pub fn audit_html_fragment(fragment : String) -> AuditResult {
+  audit_html_with_enabled_rules(fragment, all_rule_ids())
+}
+
+///|
+/// Audit an HTML fragment with only the selected rule IDs.
+///
+/// Its rule-selection and parser-diagnostic behavior matches
+/// `audit_html_with_rules`. Unknown IDs return `ConfigurationError` before
+/// parsing the fragment.
+pub fn audit_html_fragment_with_rules(
+  fragment : String,
+  enabled_rule_ids : Array[String],
+) -> ConfiguredAuditResult {
+  audit_html_with_selected_rules(fragment, enabled_rule_ids)
+}
+
+///|
+fn audit_html_with_selected_rules(
+  source : String,
+  enabled_rule_ids : Array[String],
+) -> ConfiguredAuditResult {
   match unknown_rule_id(enabled_rule_ids) {
     Some(rule_id) => ConfigurationError(UnknownRuleId(rule_id))
-    None => Audited(audit_html_with_enabled_rules(html, enabled_rule_ids))
+    None => Audited(audit_html_with_enabled_rules(source, enabled_rule_ids))
   }
 }
 

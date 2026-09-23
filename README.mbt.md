@@ -40,6 +40,27 @@ match @a11ytrace.audit_html_with_rules(html, selected) {
 
 `heading-level-skipped` is a suggestion for structural review, so it can be useful to select it independently in a content-build check. Selection does not change the caller-provided array, and all selected rules share one parsed DOM; findings remain in document order.
 
+## HTML fragment audit
+
+Components and template generators can audit local markup directly with `audit_html_fragment(fragment)`. `audit_html_fragment_with_rules(fragment, enabled_rule_ids)` has the same `ConfiguredAuditResult` and unknown-rule behavior as `audit_html_with_rules`.
+
+```moonbit nocheck
+let card = "<button></button><img src=\"report.png\">"
+
+match @a11ytrace.audit_html_fragment_with_rules(
+  card,
+  ["button-name-missing", "img-alt-missing"],
+) {
+  Audited(result) => {
+    let json = @a11ytrace.render_audit_json(result)
+    // Consume the component findings in document order.
+  }
+  ConfigurationError(UnknownRuleId(rule_id)) => ()
+}
+```
+
+Fragment parsing preserves the same deterministic paths, source locations when available, parser diagnostics, heading behavior, and template exclusion as normal auditing; in particular, the first native heading in a fragment may use any level. Name references are limited to the supplied markup: an `aria-labelledby` target or `<label for>` outside the fragment cannot be resolved and does not count as a name.
+
 ## JSON output
 
 `render_audit_json(result : AuditResult) -> String` produces compact, parseable JSON using MoonBit's `moonbitlang/core/json` library. Every document has these fields, regardless of status:

@@ -783,3 +783,124 @@ test "renders parser failures distinctly" {
     _ => fail("parser failures need their own JSON status")
   }
 }
+
+///|
+test "audits a single button fragment with its source position" {
+  match @a11ytrace.audit_html_fragment("<button></button>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[0].element_path, "button:nth-of-type(1)")
+      assert_eq(findings[0].line, Some(1))
+      assert_eq(findings[0].column, Some(1))
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+}
+
+///|
+test "keeps mixed fragment findings in source order and selects rules" {
+  let fragment = "<img src=\"x.png\">\n<input>\n<a href=\"/details\"></a>"
+  match @a11ytrace.audit_html_fragment(fragment) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[0].line, Some(1))
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[1].line, Some(2))
+      assert_eq(findings[2].rule_id, "link-name-missing")
+      assert_eq(findings[2].line, Some(3))
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, ["link-name-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "link-name-missing")
+    }
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known rule IDs must be accepted")
+  }
+}
+
+///|
+test "keeps fragment references local to the supplied markup" {
+  let document = "<label for=\"email\">Email</label><input id=\"email\">"
+  match @a11ytrace.audit_html(document) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid document input should have no parser diagnostics")
+    ParseErrors(_) => fail("valid document input should be audited")
+  }
+  match @a11ytrace.audit_html_fragment("<input id=\"email\">") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+  match
+    @a11ytrace.audit_html_fragment(
+      "<label for=\"email\">Email</label><input id=\"email\">",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+  match @a11ytrace.audit_html_fragment("<input aria-labelledby=\"name\">") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+  match
+    @a11ytrace.audit_html_fragment(
+      "<span id=\"name\">Name</span><input aria-labelledby=\"name\">",
+    ) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+}
+
+///|
+test "preserves fragment parser diagnostics and configuration errors" {
+  match @a11ytrace.audit_html_fragment("<img src=\"x.png\"></span>") {
+    FindingsWithParseErrors(findings, errors) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(errors.length(), 1)
+      assert_eq(errors[0].code, "unexpected-end-tag")
+    }
+    Findings(_) => fail("fragment parser diagnostics must not be hidden")
+    ParseErrors(_) => fail("recoverable fragments should be audited")
+  }
+  match @a11ytrace.audit_html_fragment_with_rules("</span>", ["not-a-rule"]) {
+    ConfigurationError(UnknownRuleId(rule_id)) =>
+      assert_eq(rule_id, "not-a-rule")
+    Audited(_) => fail("unknown fragment rule IDs must not be ignored")
+  }
+}
+
+///|
+test "keeps heading fragment semantics for first headings and templates" {
+  let fragment = "<h3>First</h3><template><h6>Template only</h6></template><h4>Next</h4>"
+  match @a11ytrace.audit_html_fragment(fragment) {
+    Findings(findings) => assert_eq(findings.length(), 0)
+    FindingsWithParseErrors(_, _) =>
+      fail("valid fragments should have no parser diagnostics")
+    ParseErrors(_) => fail("valid fragments should be audited")
+  }
+}
