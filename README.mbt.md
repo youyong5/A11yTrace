@@ -21,7 +21,7 @@ match @a11ytrace.audit_html("<img src=\"logo.svg\">") {
 }
 ```
 
-`audit_html` does no file I/O, so callers choose where HTML comes from and how results are presented.
+`audit_html` does no file I/O, so callers choose where HTML comes from and how results are presented. When its input contains `<!doctype` or `<html`, it uses the parser's full-document mode and includes document-only rules. Markup without either marker keeps the library's fragment-compatible behavior; use `audit_html_fragment` when auditing a component explicitly.
 
 For a focused check, `available_rule_ids()` returns the accepted IDs in stable order and `audit_html_with_rules(html, enabled_rule_ids)` runs only the requested rules. `audit_html(html)` still runs every current rule. An empty selection runs no rules while retaining parser diagnostics; an unknown ID returns `ConfigurationError(UnknownRuleId(id))` rather than being ignored. Repeated IDs do not duplicate findings.
 
@@ -60,6 +60,16 @@ match @a11ytrace.audit_html_fragment_with_rules(
 ```
 
 Fragment parsing preserves the same deterministic paths, source locations when available, parser diagnostics, heading behavior, and template exclusion as normal auditing; in particular, the first native heading in a fragment may use any level. Name references are limited to the supplied markup: an `aria-labelledby` target or `<label for>` outside the fragment cannot be resolved and does not count as a name.
+
+Document-only rules, including `document-title-missing` and `html-lang-missing`, never run through either fragment entry point. To check a page title and language, provide a full document:
+
+```moonbit nocheck
+///|
+let page = "<!doctype html><html lang=\"en\"><head><title>Orders</title></head><body></body></html>"
+
+///|
+let result = @a11ytrace.audit_html(page)
+```
 
 The in-module consumer example is a separate MoonBit package that imports only this library's public API. Run it from the repository root with:
 
@@ -124,6 +134,10 @@ moon run --target native cmd/a11ytrace -- --help
 
 `heading-level-skipped` suggests reviewing a native heading that jumps down two or more levels from the preceding heading; the first heading may start at any level. `heading-name-missing` reports empty native headings unless supported text, image alt, or ARIA naming is present. Neither rule infers headings from visual styling or implements a complete browser Accessible Name algorithm.
 
+`document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
+
+All name-related checks share an ID and `label[for]` index built once from the recovered DOM. Multiple `aria-labelledby` references are supported, but missing, empty, duplicate, cyclic, or fragment-external references do not establish a name. These are static checks: CSS visibility, rendered focusability, script-created DOM, and browser accessibility-tree behavior require manual or browser-based review.
+
 For example, both rules can be reported from one fragment:
 
 ```moonbit nocheck
@@ -151,8 +165,10 @@ match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\">
 
 The parser uses HTML5-style recovery. Recoverable parser diagnostics produce `FindingsWithParseErrors`: the recovered DOM is still checked and diagnostics stay visible. `ParseErrors` is reserved for a parser failure that prevents a DOM audit. Findings include a deterministic CSS-style `element_path`; their optional line and column are source start-tag locations supplied by the parser, and remain absent when the parser has no source position.
 
-See [RULES.md](RULES.md) for the rule rationale and the [W3C Images Tutorial](https://www.w3.org/WAI/tutorials/images/).
+See [RULES.md](RULES.md) for rule rationale and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped comparison with HTML-Validate, axe-core, and ACT references.
 
 ## License and attribution
 
 A11yTrace's audit rules and library code are original work licensed under Apache-2.0 (see [LICENSE](LICENSE)). It depends on, but does not copy, `bobzhang/html_parser` 0.1.8 and the native CLI's `moonbitlang/async` 0.19.0; both dependencies are Apache-2.0 licensed.
+
+HTML-Validate is an MIT-licensed reference project, and axe-core and W3C ACT Rules are reference material only; A11yTrace does not include or copy their source code.

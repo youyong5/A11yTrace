@@ -515,10 +515,12 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 6)
+  assert_eq(rule_ids.length(), 10)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
+  assert_eq(rule_ids[6], "document-title-missing")
+  assert_eq(rule_ids[9], "duplicate-id")
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -902,5 +904,179 @@ test "keeps heading fragment semantics for first headings and templates" {
     FindingsWithParseErrors(_, _) =>
       fail("valid fragments should have no parser diagnostics")
     ParseErrors(_) => fail("valid fragments should be audited")
+  }
+}
+
+///|
+test "reports missing document title and language only for complete documents" {
+  let document = "<!doctype html><html><head><title> </title></head><body></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, [
+      "document-title-missing", "html-lang-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "html-lang-missing")
+      assert_eq(findings[0].element_path, "html:nth-of-type(1)")
+      assert_eq(findings[1].rule_id, "document-title-missing")
+      assert_eq(
+        findings[1].element_path,
+        "html:nth-of-type(1) > head:nth-of-type(1) > title:nth-of-type(1)",
+      )
+    }
+    Audited(_) => fail("a complete document should have the two page findings")
+    ConfigurationError(_) => fail("known page rule IDs must be accepted")
+  }
+  let valid = "<!doctype html><html lang=\"en\"><head><title>Example</title></head><body></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(valid, [
+      "document-title-missing", "html-lang-missing",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("valid complete document should not have parser diagnostics")
+    ConfigurationError(_) => fail("known page rule IDs must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<title></title>", [
+      "document-title-missing", "html-lang-missing",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("the simple fragment should have no parser diagnostics")
+    ConfigurationError(_) => fail("known page rule IDs must be accepted")
+  }
+}
+
+///|
+test "reports a missing title at html when no title element exists" {
+  let document = "<!doctype html><html lang=\"en\"><head></head><body></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["document-title-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].element_path, "html:nth-of-type(1)")
+      assert_eq(findings[0].line, Some(1))
+    }
+    Audited(_) => fail("missing title should be reported")
+    ConfigurationError(_) => fail("known page rule ID must be accepted")
+  }
+}
+
+///|
+test "recognizes supported iframe names and reports missing or unresolved names" {
+  let named = "<span id=\"frame-label\">Report</span>" +
+    "<iframe title=\"Map\"></iframe>" +
+    "<iframe aria-label=\"Calendar\"></iframe>" +
+    "<iframe aria-labelledby=\"frame-label\"></iframe>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(named, ["iframe-name-missing"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("named iframes should have no parser diagnostics")
+    ConfigurationError(_) => fail("known iframe rule ID must be accepted")
+  }
+  let unnamed = "<iframe></iframe><iframe title=\" \"></iframe>" +
+    "<iframe aria-labelledby=\"missing\"></iframe>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(unnamed, ["iframe-name-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].element_path, "iframe:nth-of-type(1)")
+      assert_eq(findings[2].element_path, "iframe:nth-of-type(3)")
+    }
+    Audited(_) =>
+      fail("valid iframe fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known iframe rule ID must be accepted")
+  }
+}
+
+///|
+test "indexes duplicate IDs once and keeps ambiguous references unnamed" {
+  let fragment = "<span id=\"label\">Name</span><span id=\"label\">Again</span>" +
+    "<input aria-labelledby=\"label\">"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "duplicate-id", "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "duplicate-id")
+      assert_eq(findings[0].element_path, "span:nth-of-type(2)")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+    }
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known rule IDs must be accepted")
+  }
+  let templates_are_not_input_scope = "<template><span id=\"same\">Template</span></template><div id=\"same\"></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(templates_are_not_input_scope, [
+      "duplicate-id",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known rule ID must be accepted")
+  }
+}
+
+///|
+test "shares indexed label and IDREF handling for multiple missing and cyclic references" {
+  let labelled = "<label for=\"email\">Email</label><input id=\"email\" aria-labelledby=\"missing helper\">" +
+    "<span id=\"helper\">Help</span>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(labelled, [
+      "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known rule ID must be accepted")
+  }
+  let cyclic = "<span id=\"first\" aria-labelledby=\"second\"></span>" +
+    "<span id=\"second\" aria-labelledby=\"first\"></span>" +
+    "<input aria-labelledby=\"first second\">"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(cyclic, [
+      "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "form-control-name-missing")
+    }
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known rule ID must be accepted")
+  }
+}
+
+///|
+test "keeps document parser diagnostics with iframe findings" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Example</title></head>" +
+    "<body><iframe></iframe></span></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["iframe-name-missing"]) {
+    Audited(FindingsWithParseErrors(findings, diagnostics)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "iframe-name-missing")
+      assert_true(diagnostics.length() > 0)
+    }
+    Audited(_) =>
+      fail("recoverable document HTML must retain the iframe finding")
+    ConfigurationError(_) => fail("known iframe rule ID must be accepted")
+  }
+}
+
+///|
+test "keeps existing rule findings on a complete document with page metadata" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Example</title></head><body>" +
+    "<img src=\"chart.png\"><input><a href=\"/next\"></a><button></button>" +
+    "<h2>Section</h2><h4></h4></body></html>"
+  match @a11ytrace.audit_html(document) {
+    Findings(findings) => {
+      assert_eq(findings.length(), 6)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+      assert_eq(findings[1].rule_id, "form-control-name-missing")
+      assert_eq(findings[2].rule_id, "link-name-missing")
+      assert_eq(findings[3].rule_id, "button-name-missing")
+      assert_eq(findings[4].rule_id, "heading-level-skipped")
+      assert_eq(findings[5].rule_id, "heading-name-missing")
+    }
+    FindingsWithParseErrors(_, _) =>
+      fail("the complete document should not have parser diagnostics")
+    ParseErrors(_) => fail("the complete document should be audited")
   }
 }

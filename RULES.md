@@ -6,6 +6,74 @@
 
 All selected rules use one recovered DOM and report findings in document order. Rule selection does not implement or imply a conformance profile: in particular, `heading-level-skipped` remains an advisory structural-review rule.
 
+## Input scope and shared context
+
+`audit_html_fragment` always treats its input as a component-local fragment.
+`audit_html` preserves the earlier fragment-compatible behavior for markup
+without a complete-document marker; input containing `<!doctype` or `<html` is
+parsed as a complete document and can run the document-only rules below. This
+keeps page requirements from being applied to a standalone component. Use an
+explicit `<!doctype html><html …>` document when page-level checks are wanted.
+
+For every audited DOM, A11yTrace builds one shared context before evaluating
+rules. It indexes non-empty IDs and `label[for]` associations, skipping inert
+`template` contents. `aria-labelledby` accepts a whitespace-separated list:
+any uniquely resolved, text-bearing target supplies a static name. Empty
+values, missing targets, targets outside a supplied fragment, and duplicate-ID
+targets do not supply a name. The implementation does not recursively follow
+ARIA references, so cycles terminate safely and do not create a name. A
+duplicate non-empty ID reports every occurrence after the first in the audited
+input scope.
+
+Parser recovery still produces a recovered DOM and diagnostics. The context is
+built from that recovered DOM; callers should review parser diagnostics before
+treating reference-related results as authoritative.
+
+## `document-title-missing`
+
+For a complete document input, reports when the document head has no non-empty
+`<title>`. An empty or whitespace-only `<title>` is reported at that element;
+when no title exists the finding is attached to the document's `<html>`
+element. The rule does not judge whether the title is descriptive, unique, or
+supplied by a higher-level protocol such as an HTML email subject.
+
+It is informed by [W3C ACT: HTML page has non-empty title](https://www.w3.org/WAI/standards-guidelines/act/rules/2779a5/)
+and HTML-Validate's [empty-title](https://html-validate.org/rules/empty-title.html)
+rule.
+
+## `html-lang-missing`
+
+For a complete document input, reports when the document `<html>` element lacks
+a non-empty `lang` attribute. It checks presence and non-whitespace content
+only; it does not validate language-tag syntax, determine language changes in
+descendants, or infer a language from text.
+
+It is informed by [WCAG Understanding Success Criterion 3.1.1: Language of
+Page](https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html).
+
+## `iframe-name-missing`
+
+Reports an `<iframe>` without a non-empty `title`, `aria-label`, or resolvable
+text-bearing `aria-labelledby` target. It checks static markup only. In
+particular, it cannot determine CSS visibility, the accessibility-tree
+inclusion exceptions in ACT (such as rendered behavior), or browser and
+assistive-technology differences; review those cases manually.
+
+The accepted static naming sources follow the [W3C ACT proposed iframe-name
+rule](https://www.w3.org/WAI/standards-guidelines/act/rules/cae760/proposed/).
+
+## `duplicate-id`
+
+Reports each later occurrence of a non-empty `id` that duplicates an earlier
+one in the same audited document or fragment input. The first occurrence is not
+reported. Inert descendants of `<template>` are outside the input scope, so
+their IDs are not compared with instantiated markup. This matches the need for
+unique IDs within an active document scope, while keeping component-template
+markup conservative.
+
+The rule is informed by HTML-Validate's [no-dup-id](https://html-validate.org/rules/no-dup-id.html)
+rule. It does not validate ID syntax; that is a separate concern.
+
 ## `img-alt-missing`
 
 Reports an HTML `<img>` element that omits the `alt` attribute. The suggested repair is to add an appropriate `alt` attribute; `alt=""` is a valid explicit choice for a decorative image.
