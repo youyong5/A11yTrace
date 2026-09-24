@@ -260,6 +260,250 @@ test "does not treat script style or template text as a link name" {
 }
 
 ///|
+test "detailed fragment audit separates aria hidden focus review items" {
+  let result = @a11ytrace.audit_html_fragment_detailed(
+    "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
+  )
+  match result.status {
+    @a11ytrace.DetailedAuditStatus::Findings => ()
+    _ => fail("clean fragment should have findings status")
+  }
+  assert_eq(result.findings.length(), 0)
+  assert_eq(result.parse_diagnostics.length(), 0)
+  assert_eq(result.review_items.length(), 1)
+  let item = result.review_items[0]
+  assert_eq(item.rule_id, "aria-hidden-focus-review")
+  assert_eq(item.element_path, "div:nth-of-type(1) > button:nth-of-type(1)")
+  assert_eq(item.line, Some(1))
+  assert_eq(item.column, Some(25))
+}
+
+///|
+test "aria hidden ancestors cannot be undone and disabled differs from aria disabled" {
+  let html = "<div aria-hidden=\"true\"><div aria-hidden=\"false\">" +
+    "<a href=\"/x\">Link</a></div><button disabled aria-label=\"Saved\"></button>" +
+    "<button aria-disabled=\"true\" aria-label=\"Unavailable\"></button>" +
+    "<div tabindex=\"-1\"></div></div>"
+  let result = @a11ytrace.audit_html_fragment_detailed(html)
+  assert_eq(result.findings.length(), 0)
+  assert_eq(result.review_items.length(), 3)
+  assert_eq(
+    result.review_items[0].element_path,
+    "div:nth-of-type(1) > div:nth-of-type(1) > a:nth-of-type(1)",
+  )
+  assert_eq(
+    result.review_items[1].element_path,
+    "div:nth-of-type(1) > button:nth-of-type(2)",
+  )
+  assert_eq(
+    result.review_items[2].element_path,
+    "div:nth-of-type(1) > div:nth-of-type(2)",
+  )
+  assert_true(result.review_items[2].reason.contains("tabindex=\"-1\""))
+}
+
+///|
+test "detailed rule selection retains reviews and rejects unknown IDs" {
+  match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div aria-hidden=\"true\"><a href=\"/x\">Link</a></div>",
+      ["aria-hidden-focus-review", "aria-hidden-focus-review"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => {
+      assert_eq(result.findings.length(), 0)
+      assert_eq(result.review_items.length(), 1)
+    }
+    _ => fail("detailed selection must retain manual review items")
+  }
+  match @a11ytrace.audit_html_detailed_with_rules("</span>", ["not-a-rule"]) {
+    @a11ytrace.DetailedConfiguredAuditResult::ConfigurationError(
+      UnknownRuleId(rule_id)
+    ) => assert_eq(rule_id, "not-a-rule")
+    _ => fail("unknown detailed rule IDs must be rejected before parsing")
+  }
+}
+
+///|
+test "aria hidden review includes supported native media and summary controls" {
+  let result = @a11ytrace.audit_html_fragment_detailed(
+    "<div aria-hidden=\"true\"><summary>More</summary><video controls></video></div>",
+  )
+  assert_eq(result.review_items.length(), 2)
+  assert_eq(
+    result.review_items[0].element_path,
+    "div:nth-of-type(1) > summary:nth-of-type(1)",
+  )
+  assert_eq(
+    result.review_items[1].element_path,
+    "div:nth-of-type(1) > video:nth-of-type(1)",
+  )
+}
+
+///|
+test "body aria hidden and multiple main are document-only findings" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head>" +
+    "<body aria-hidden=\"true\"><main>One</main><main>Two</main></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, [
+      "body-aria-hidden", "multiple-main",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "body-aria-hidden")
+      assert_eq(findings[1].rule_id, "multiple-main")
+    }
+    _ => fail("document-only rules should audit a complete document")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<body aria-hidden=\"true\"><main></main><main></main>",
+      ["body-aria-hidden", "multiple-main"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(FindingsWithParseErrors(findings, _)) =>
+      assert_eq(findings.length(), 0)
+    _ => fail("fragment audit must not run document-only rules")
+  }
+}
+
+///|
+test "multiple navigation landmarks need distinct static names" {
+  let valid = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<span id=\"footer-name\">Footer</span><nav aria-label=\"Primary\"></nav>" +
+    "<nav aria-labelledby=\"footer-name\"></nav></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(valid, [
+      "navigation-landmark-name-missing", "navigation-landmark-name-duplicate",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    _ => fail("distinct navigation names should be accepted")
+  }
+  let invalid = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<nav></nav><nav aria-label=\"Primary\"></nav><nav aria-label=\"Primary\"></nav></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(invalid, [
+      "navigation-landmark-name-missing", "navigation-landmark-name-duplicate",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "navigation-landmark-name-missing")
+      assert_eq(findings[1].rule_id, "navigation-landmark-name-duplicate")
+    }
+    _ => fail("unnamed and duplicate navigation names should be reported")
+  }
+}
+
+///|
+test "svg navigation names are review items and abstract roles are definite findings" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<nav><svg><title>Menu</title></svg></nav><nav aria-label=\"Primary\"></nav>" +
+    "<div role=\"button landmark\"></div><div role=\"\"></div></body></html>"
+  let detailed = @a11ytrace.audit_html_detailed(document)
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(
+    detailed.review_items[0].rule_id,
+    "navigation-landmark-name-missing",
+  )
+  let abstract_findings = detailed.findings.filter(fn(finding) {
+    finding.rule_id == "aria-abstract-role"
+  })
+  assert_eq(abstract_findings.length(), 1)
+  let json = @a11ytrace.render_detailed_audit_json(detailed)
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "review_items": Array([{ "rule_id": String(rule_id), .. }]),
+      ..
+    } => {
+      assert_eq(status, "findings")
+      assert_eq(rule_id, "navigation-landmark-name-missing")
+    }
+    _ => fail("detailed JSON must expose the documented review items")
+  }
+}
+
+///|
+test "abstract role rule covers the complete ARIA 1.2 abstract role set" {
+  let html = "<i role=\"command\"></i><i role=\"composite\"></i>" +
+    "<i role=\"input\"></i><i role=\"landmark\"></i><i role=\"range\"></i>" +
+    "<i role=\"roletype\"></i><i role=\"section\"></i><i role=\"sectionhead\"></i>" +
+    "<i role=\"select\"></i><i role=\"structure\"></i><i role=\"widget\"></i>" +
+    "<i role=\"window\"></i><i role=\"button\"></i>"
+  match @a11ytrace.audit_html_with_rules(html, ["aria-abstract-role"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 12)
+      for finding in findings {
+        assert_eq(finding.rule_id, "aria-abstract-role")
+      }
+    }
+    _ =>
+      fail(
+        "abstract ARIA roles should be identified without rejecting concrete roles",
+      )
+  }
+}
+
+///|
+test "detailed JSON round trips diagnostics review reasons and unknown positions" {
+  let result : @a11ytrace.DetailedAuditResult = {
+    status: @a11ytrace.DetailedAuditStatus::FindingsWithParseErrors,
+    findings: [],
+    parse_diagnostics: [
+      {
+        code: "recoverable",
+        message: "Bad \"markup\"\n中文",
+        line: None,
+        column: None,
+      },
+    ],
+    review_items: [
+      {
+        rule_id: "aria-hidden-focus-review",
+        reason: "Check \\ focus and \"CSS\"\n中文",
+        element_path: "div:nth-of-type(1)",
+        line: None,
+        column: None,
+      },
+    ],
+  }
+  let json = @a11ytrace.render_detailed_audit_json(result)
+  assert_true(@json.valid(json))
+  match @json.parse(json) {
+    {
+      "status": String(status),
+      "findings": Array([]),
+      "parse_diagnostics": Array(
+        [{ "message": String(diagnostic), "line": Null, "column": Null, .. }]
+      ),
+      "review_items": Array(
+        [{ "reason": String(reason), "line": Null, "column": Null, .. }]
+      ),
+      ..
+    } => {
+      assert_eq(status, "findings_with_parse_errors")
+      assert_eq(diagnostic, "Bad \"markup\"\n中文")
+      assert_eq(reason, "Check \\ focus and \"CSS\"\n中文")
+    }
+    _ => fail("detailed JSON must preserve all result categories")
+  }
+}
+
+///|
+test "detailed audits preserve recoverable parser diagnostics separately" {
+  let result = @a11ytrace.audit_html_detailed(
+    "<img src=\"missing.png\"></span>",
+  )
+  match result.status {
+    @a11ytrace.DetailedAuditStatus::FindingsWithParseErrors => ()
+    _ => fail("recoverable HTML must retain its detailed parser status")
+  }
+  assert_eq(result.findings.length(), 1)
+  assert_eq(result.findings[0].rule_id, "img-alt-missing")
+  assert_eq(result.parse_diagnostics.length(), 1)
+  assert_eq(result.review_items.length(), 0)
+}
+
+///|
 test "does not audit anchors without href and conservatively skips svg links" {
   match
     @a11ytrace.audit_html(
@@ -514,7 +758,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 13)
+  assert_eq(rule_ids.length(), 19)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -522,6 +766,8 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_eq(rule_ids[9], "duplicate-id")
   assert_eq(rule_ids[10], "reference-target-invalid")
   assert_eq(rule_ids[12], "area-alt-missing")
+  assert_eq(rule_ids[13], "aria-hidden-focus-review")
+  assert_eq(rule_ids[18], "aria-abstract-role")
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")

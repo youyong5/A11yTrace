@@ -132,6 +132,67 @@ The rule is informed by the [W3C ACT link-name rule](https://www.w3.org/WAI/stan
 which uses `alt` for linked areas and records browser/assistive-technology
 variation. It is a focused static signal, not a complete WCAG conclusion.
 
+## Detailed results and review items
+
+`audit_html_detailed` and `audit_html_fragment_detailed` return definite
+findings, parser diagnostics, and `review_items` separately. A review item has
+the same stable rule ID and source locator style as a finding, but its reason
+states why static HTML alone is insufficient. `render_detailed_audit_json`
+serializes `status`, `findings`, `parse_diagnostics`, and `review_items`.
+Existing `AuditResult` APIs deliberately remain compatible and expose only
+definite findings plus diagnostics. The corresponding detailed selection APIs
+return `DetailedConfiguredAuditResult`, so selecting `aria-hidden-focus-review`
+does not silently discard review items; unknown IDs remain explicit configuration
+errors before parsing.
+
+## `body-aria-hidden`
+
+For complete-document input only, reports `<body aria-hidden="true">`. Hiding
+the document body can remove its contents from the accessibility tree. This is
+a definite markup signal, but it does not establish the final rendered tree or
+whether a script changes the attribute later. The rule is not run on fragments.
+
+## `multiple-main`
+
+For complete-document input only, reports every native `<main>` after the first
+in document order as a structure prompt. It does not infer landmarks from
+roles, evaluate nested browsing contexts, or declare WCAG conformance. It is
+informed by HTML-Validate's document-oriented landmark checks.
+
+## `navigation-landmark-name-missing` and `navigation-landmark-name-duplicate`
+
+When a complete document has more than one native `<nav>`, each is checked for
+a supported static distinguishing name from non-empty `aria-labelledby`,
+`aria-label`, or `title`. An unnamed landmark is reported by
+`navigation-landmark-name-missing`; a later repetition of the same static name
+is reported by `navigation-landmark-name-duplicate`. SVG-only or runtime naming
+sources become a review item rather than an asserted missing name. These rules
+do not run on fragments and do not implement the browser Accessible Name
+algorithm. They are informed by HTML-Validate's landmark-name guidance.
+
+## `aria-hidden-focus-review`
+
+This is a manual review item, not a confirmed WCAG violation. It marks an
+element inside `aria-hidden="true"` (including a hidden ancestor) when it has
+a supported potentially focusable native form/link/iframe behavior or a
+non-empty explicit `tabindex`; `tabindex="-1"` is included because scripts can
+focus it. A descendant `aria-hidden="false"` cannot cancel a hidden ancestor.
+Native disabled controls are excluded, while `aria-disabled` alone is not.
+Static HTML cannot determine CSS visibility, disabled state changed by script,
+or actual sequential/programmatic focus behavior, so browsers must be checked.
+This scope is informed by [W3C ACT rule 6cfa84](https://www.w3.org/WAI/standards-guidelines/act/rules/6cfa84/),
+but the library deliberately reports review rather than claiming the ACT result.
+
+## `aria-abstract-role`
+
+Reports a non-empty `role` attribute that contains an ARIA 1.2 abstract role
+token: `command`, `composite`, `input`, `landmark`, `range`, `roletype`,
+`section`, `sectionhead`, `select`, `structure`, `widget`, or `window`.
+Empty roles are ignored. This intentionally is not a general role-validity
+rule: it does not reject concrete roles, validate fallback processing, or use
+a partial whitelist to claim other roles are invalid. See the [WAI-ARIA 1.2
+role taxonomy](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
+
 ## `img-alt-missing`
 
 Reports an HTML `<img>` element that omits the `alt` attribute. The suggested repair is to add an appropriate `alt` attribute; `alt=""` is a valid explicit choice for a decorative image.

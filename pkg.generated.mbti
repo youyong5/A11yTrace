@@ -4,7 +4,15 @@ package "youyong5/a11ytrace"
 // Values
 pub fn audit_html(String) -> AuditResult
 
+pub fn audit_html_detailed(String) -> DetailedAuditResult
+
+pub fn audit_html_detailed_with_rules(String, Array[String]) -> DetailedConfiguredAuditResult
+
 pub fn audit_html_fragment(String) -> AuditResult
+
+pub fn audit_html_fragment_detailed(String) -> DetailedAuditResult
+
+pub fn audit_html_fragment_detailed_with_rules(String, Array[String]) -> DetailedConfiguredAuditResult
 
 pub fn audit_html_fragment_with_rules(String, Array[String]) -> ConfiguredAuditResult
 
@@ -13,6 +21,8 @@ pub fn audit_html_with_rules(String, Array[String]) -> ConfiguredAuditResult
 pub fn available_rule_ids() -> Array[String]
 
 pub fn render_audit_json(AuditResult) -> String
+
+pub fn render_detailed_audit_json(DetailedAuditResult) -> String
 
 // Errors
 
@@ -28,6 +38,24 @@ pub(all) enum ConfiguredAuditResult {
   ConfigurationError(RuleConfigurationError)
 }
 
+pub(all) struct DetailedAuditResult {
+  status : DetailedAuditStatus
+  findings : Array[Finding]
+  parse_diagnostics : Array[ParseDiagnostic]
+  review_items : Array[ReviewItem]
+}
+
+pub(all) enum DetailedAuditStatus {
+  Findings
+  FindingsWithParseErrors
+  ParseErrors
+}
+
+pub(all) enum DetailedConfiguredAuditResult {
+  Audited(DetailedAuditResult)
+  ConfigurationError(RuleConfigurationError)
+}
+
 pub(all) struct Finding {
   rule_id : String
   message : String
@@ -40,6 +68,14 @@ pub(all) struct Finding {
 pub(all) struct ParseDiagnostic {
   code : String
   message : String
+  line : Int?
+  column : Int?
+}
+
+pub(all) struct ReviewItem {
+  rule_id : String
+  reason : String
+  element_path : String
   line : Int?
   column : Int?
 }

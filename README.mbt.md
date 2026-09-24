@@ -109,6 +109,22 @@ match @a11ytrace.audit_html_with_rules(html, ["img-alt-missing"]) {
 - A documentation-site build can audit generated guide fragments.
 - A frontend CI job can audit fixture or server-rendered HTML and fail on findings.
 
+## Detailed static audit and manual review
+
+`audit_html_detailed(html)` and `audit_html_fragment_detailed(fragment)` retain the same parser status and definite `findings` as the compatible audit APIs, while exposing `review_items` separately. A review item has `rule_id`, `reason`, `element_path`, `line`, and `column`; it means static markup alone cannot establish the result. `audit_html_detailed_with_rules` and `audit_html_fragment_detailed_with_rules` return `DetailedConfiguredAuditResult`, preserving the same explicit unknown-ID behavior while retaining review items. `render_detailed_audit_json(result)` adds a `review_items` array to the same stable JSON fields and status values. It does not serialize a rule-selection configuration error, because configuration errors must still be handled before an audit is run.
+
+```moonbit nocheck
+///|
+let detailed = @a11ytrace.audit_html_fragment_detailed(
+  "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
+)
+
+///|
+let json = @a11ytrace.render_detailed_audit_json(detailed)
+// detailed.findings: confirmed static signals
+// detailed.review_items: browser/CSS review needed
+```
+
 ## Native CLI example
 
 The library remains the primary interface; the optional native executable in `cmd/a11ytrace` only reads one local HTML file and calls the public API above. Build or run it with MoonBit:
@@ -137,6 +153,10 @@ moon run --target native cmd/a11ytrace -- --help
 `document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
 
 `reference-target-invalid` reports missing or ambiguous non-empty targets used by `label[for]`, `aria-labelledby`, or `aria-describedby`; it does not call a separately named control “unnamed” merely because one of its references is invalid. `table-headers-invalid` checks that each `headers` token resolves to another unique `td` or `th` in the same nearest table. `area-alt-missing` requires non-empty `alt` on an `<area href>`; an area without `href` is outside that rule.
+
+`body-aria-hidden` reports `aria-hidden="true"` on the body of a complete document. `multiple-main` is a static structural prompt for every main after the first in a complete document. When a document has multiple `<nav>` landmarks, `navigation-landmark-name-missing` reports a landmark without a supported static distinguishing name and `navigation-landmark-name-duplicate` reports a later repeated static name. These page-structure rules do not run for fragments.
+
+`aria-hidden-focus-review` is a review item rather than a confirmed finding. It identifies a potentially focusable native element or explicit `tabindex` within an `aria-hidden="true"` element or ancestor; descendant `aria-hidden="false"` cannot undo an ancestor's hidden state. Disabled native controls are excluded, but `aria-disabled` alone is not. CSS, scripting, and browser focus behavior decide the final outcome. `aria-abstract-role` is a definite markup finding when a `role` attribute includes one of the ARIA 1.2 abstract role tokens; it intentionally does not claim that other role tokens are invalid.
 
 All name-related checks share an ID and `label[for]` index built once from the recovered DOM. Multiple `aria-labelledby` references are supported, but missing, empty, duplicate, cyclic, or fragment-external references do not establish a name. A directly referenced static text node is accepted even if its markup has `hidden` or `aria-hidden`; A11yTrace does not compute rendered visibility or the browser name algorithm. These are static checks: CSS visibility, rendered focusability, script-created DOM, shadow DOM, and browser accessibility-tree behavior require manual or browser-based review.
 

@@ -18,7 +18,7 @@ match @a11ytrace.audit_html_fragment("<button></button>") {
 }
 ```
 
-Public entry points include `audit_html`, `audit_html_fragment`, their rule-selection variants, `available_rule_ids`, and `render_audit_json`. Inputs containing `<!doctype` or `<html` use full-document parsing, so page-only checks can verify a non-empty document title and `html[lang]`; component fragments never receive those page-only findings.
+Public entry points include `audit_html`, `audit_html_fragment`, their rule-selection variants, `available_rule_ids`, and `render_audit_json`. `audit_html_detailed`, `audit_html_fragment_detailed`, their detailed selection variants, and `render_detailed_audit_json` additionally keep definite findings separate from parser diagnostics and browser/CSS review items. Inputs containing `<!doctype` or `<html` use full-document parsing, so page-only checks can verify a non-empty document title and `html[lang]`; component fragments never receive those page-only findings.
 
 Run the in-module consumer example from the repository root:
 
@@ -26,6 +26,6 @@ Run the in-module consumer example from the repository root:
 moon run --target native examples/consumer
 ```
 
-The current rules cover image alt presence; static names for form controls, links, buttons, headings, iframes, and linked image-map areas; heading skips; complete-document title/language presence; duplicate IDs; selected invalid ID references; and same-table `headers` relationships. The checks are deliberately scoped heuristics, not a complete Accessible Name implementation or a WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
+The current rules cover image alt presence; static names for form controls, links, buttons, headings, iframes, and linked image-map areas; heading skips; complete-document title/language and landmark structure; duplicate IDs; selected invalid ID references; same-table `headers` relationships; and abstract ARIA roles. Potential focusable content in `aria-hidden` subtrees is a manual-review result, not an asserted rendered violation. The checks are deliberately scoped heuristics, not a complete Accessible Name implementation or a WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
 
 See [README.mbt.md](README.mbt.md) for full MoonBit examples, JSON fields, rules, and the native CLI; [RULES.md](RULES.md) for rule boundaries; and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped HTML-Validate/axe-core/ACT comparison and static-analysis limits.

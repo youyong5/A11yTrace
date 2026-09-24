@@ -35,9 +35,45 @@ pub(all) struct ParseDiagnostic {
 }
 
 ///|
+/// The parser and finding status of a detailed audit.
+pub(all) enum DetailedAuditStatus {
+  Findings
+  FindingsWithParseErrors
+  ParseErrors
+}
+
+///|
+/// A static check that requires browser, CSS, or runtime information before it
+/// can be treated as a confirmed issue.
+pub(all) struct ReviewItem {
+  rule_id : String
+  reason : String
+  element_path : String
+  line : Int?
+  column : Int?
+}
+
+///|
+/// A detailed audit result that keeps definite findings, parser diagnostics,
+/// and manual-review items separate.
+pub(all) struct DetailedAuditResult {
+  status : DetailedAuditStatus
+  findings : Array[Finding]
+  parse_diagnostics : Array[ParseDiagnostic]
+  review_items : Array[ReviewItem]
+}
+
+///|
 /// A result produced by `audit_html_with_rules`.
 pub(all) enum ConfiguredAuditResult {
   Audited(AuditResult)
+  ConfigurationError(RuleConfigurationError)
+}
+
+///|
+/// A result produced by a detailed rule-selected audit.
+pub(all) enum DetailedConfiguredAuditResult {
+  Audited(DetailedAuditResult)
   ConfigurationError(RuleConfigurationError)
 }
 
@@ -60,9 +96,36 @@ pub(all) enum RuleConfigurationError {
 /// without such a marker retains fragment-style parsing; use
 /// `audit_html_fragment` to explicitly audit a component fragment.
 pub fn audit_html(html : String) -> AuditResult {
-  audit_html_with_enabled_rules(
+  detailed_to_audit_result(
+    audit_html_detailed_with_enabled_rules(
+      html,
+      all_rule_ids(),
+      looks_like_html_document(html),
+    ),
+  )
+}
+
+///|
+/// Audit HTML and keep definite findings separate from items needing browser
+/// or CSS review. Unlike `audit_html`, this result exposes `review_items`.
+pub fn audit_html_detailed(html : String) -> DetailedAuditResult {
+  audit_html_detailed_with_enabled_rules(
     html,
     all_rule_ids(),
+    looks_like_html_document(html),
+  )
+}
+
+///|
+/// Audit HTML with selected rules while retaining manual-review items.
+/// Unknown IDs are returned before parsing, as with `audit_html_with_rules`.
+pub fn audit_html_detailed_with_rules(
+  html : String,
+  enabled_rule_ids : Array[String],
+) -> DetailedConfiguredAuditResult {
+  audit_html_detailed_with_selected_rules(
+    html,
+    enabled_rule_ids,
     looks_like_html_document(html),
   )
 }
@@ -97,7 +160,25 @@ pub fn audit_html_with_rules(
 /// in a complete document. Labels and ARIA references are resolved only
 /// within the supplied fragment.
 pub fn audit_html_fragment(fragment : String) -> AuditResult {
-  audit_html_with_enabled_rules(fragment, all_rule_ids(), false)
+  detailed_to_audit_result(
+    audit_html_detailed_with_enabled_rules(fragment, all_rule_ids(), false),
+  )
+}
+
+///|
+/// Audit an HTML fragment and keep manual-review items separate from definite
+/// findings and parser diagnostics.
+pub fn audit_html_fragment_detailed(fragment : String) -> DetailedAuditResult {
+  audit_html_detailed_with_enabled_rules(fragment, all_rule_ids(), false)
+}
+
+///|
+/// Audit a fragment with selected rules while retaining manual-review items.
+pub fn audit_html_fragment_detailed_with_rules(
+  fragment : String,
+  enabled_rule_ids : Array[String],
+) -> DetailedConfiguredAuditResult {
+  audit_html_detailed_with_selected_rules(fragment, enabled_rule_ids, false)
 }
 
 ///|
@@ -123,7 +204,28 @@ fn audit_html_with_selected_rules(
     Some(rule_id) => ConfigurationError(UnknownRuleId(rule_id))
     None =>
       Audited(
-        audit_html_with_enabled_rules(source, enabled_rule_ids, is_document),
+        detailed_to_audit_result(
+          audit_html_detailed_with_enabled_rules(
+            source, enabled_rule_ids, is_document,
+          ),
+        ),
+      )
+  }
+}
+
+///|
+fn audit_html_detailed_with_selected_rules(
+  source : String,
+  enabled_rule_ids : Array[String],
+  is_document : Bool,
+) -> DetailedConfiguredAuditResult {
+  match unknown_rule_id(enabled_rule_ids) {
+    Some(rule_id) => ConfigurationError(UnknownRuleId(rule_id))
+    None =>
+      Audited(
+        audit_html_detailed_with_enabled_rules(
+          source, enabled_rule_ids, is_document,
+        ),
       )
   }
 }
@@ -136,6 +238,13 @@ fn audit_html_with_selected_rules(
 /// when the parser did not provide them.
 pub fn render_audit_json(result : AuditResult) -> String {
   @json.to_json(audit_result_json(result)).stringify()
+}
+
+///|
+/// Render a detailed audit result as compact JSON. It has the stable fields
+/// `status`, `findings`, `parse_diagnostics`, and `review_items`.
+pub fn render_detailed_audit_json(result : DetailedAuditResult) -> String {
+  @json.to_json(detailed_audit_result_json(result)).stringify()
 }
 
 ///|
@@ -163,6 +272,25 @@ fn audit_result_json(result : AuditResult) -> Json {
 }
 
 ///|
+fn detailed_audit_result_json(result : DetailedAuditResult) -> Json {
+  {
+    "status": detailed_status_string(result.status),
+    "findings": result.findings.map(finding_json),
+    "parse_diagnostics": result.parse_diagnostics.map(parse_diagnostic_json),
+    "review_items": result.review_items.map(review_item_json),
+  }
+}
+
+///|
+fn detailed_status_string(status : DetailedAuditStatus) -> String {
+  match status {
+    DetailedAuditStatus::Findings => "findings"
+    DetailedAuditStatus::FindingsWithParseErrors => "findings_with_parse_errors"
+    DetailedAuditStatus::ParseErrors => "parse_errors"
+  }
+}
+
+///|
 fn finding_json(finding : Finding) -> Json {
   {
     "rule_id": finding.rule_id,
@@ -185,6 +313,17 @@ fn parse_diagnostic_json(diagnostic : ParseDiagnostic) -> Json {
 }
 
 ///|
+fn review_item_json(item : ReviewItem) -> Json {
+  {
+    "rule_id": item.rule_id,
+    "reason": item.reason,
+    "element_path": item.element_path,
+    "line": optional_int_json(item.line),
+    "column": optional_int_json(item.column),
+  }
+}
+
+///|
 fn optional_int_json(value : Int?) -> Json {
   match value {
     Some(value) => @json.to_json(value)
@@ -193,11 +332,11 @@ fn optional_int_json(value : Int?) -> Json {
 }
 
 ///|
-fn audit_html_with_enabled_rules(
+fn audit_html_detailed_with_enabled_rules(
   html : String,
   enabled_rule_ids : Array[String],
   is_document : Bool,
-) -> AuditResult {
+) -> DetailedAuditResult {
   let parsed = try {
     if is_document {
       @html_parser.parse(html, collect_errors=true, track_node_locations=true)
@@ -209,26 +348,52 @@ fn audit_html_with_enabled_rules(
       )
     }
   } catch {
-    error => return ParseErrors([parse_failure(error)])
+    error =>
+      return {
+        status: DetailedAuditStatus::ParseErrors,
+        findings: [],
+        parse_diagnostics: [parse_failure(error)],
+        review_items: [],
+      }
   }
   let context = build_audit_context(parsed.root, is_document)
   let findings = []
+  let review_items = []
+  let seen_navigation_names : Array[String] = []
   ignore(
     collect_findings(
       parsed.root,
       "",
       None,
       findings,
+      review_items,
       enabled_rule_ids,
       None,
       context,
+      false,
+      seen_navigation_names,
     ),
   )
   let diagnostics = parsed.errors.map(parse_diagnostic)
-  if diagnostics.is_empty() {
-    Findings(findings)
+  let status = if diagnostics.is_empty() {
+    DetailedAuditStatus::Findings
   } else {
-    FindingsWithParseErrors(findings, diagnostics)
+    DetailedAuditStatus::FindingsWithParseErrors
+  }
+  { status, findings, parse_diagnostics: diagnostics, review_items, }
+}
+
+///|
+fn detailed_to_audit_result(result : DetailedAuditResult) -> AuditResult {
+  match result.status {
+    DetailedAuditStatus::Findings => AuditResult::Findings(result.findings)
+    DetailedAuditStatus::FindingsWithParseErrors =>
+      AuditResult::FindingsWithParseErrors(
+        result.findings,
+        result.parse_diagnostics,
+      )
+    DetailedAuditStatus::ParseErrors =>
+      AuditResult::ParseErrors(result.parse_diagnostics)
   }
 }
 
@@ -249,7 +414,8 @@ fn all_rule_ids() -> Array[String] {
     "img-alt-missing", "form-control-name-missing", "link-name-missing", "button-name-missing",
     "heading-level-skipped", "heading-name-missing", "document-title-missing", "html-lang-missing",
     "iframe-name-missing", "duplicate-id", "reference-target-invalid", "table-headers-invalid",
-    "area-alt-missing",
+    "area-alt-missing", "aria-hidden-focus-review", "body-aria-hidden", "multiple-main",
+    "navigation-landmark-name-missing", "navigation-landmark-name-duplicate", "aria-abstract-role",
   ]
 }
 
@@ -278,7 +444,13 @@ fn is_available_rule_id(rule_id : String) -> Bool {
   | "duplicate-id"
   | "reference-target-invalid"
   | "table-headers-invalid"
-  | "area-alt-missing")
+  | "area-alt-missing"
+  | "aria-hidden-focus-review"
+  | "body-aria-hidden"
+  | "multiple-main"
+  | "navigation-landmark-name-missing"
+  | "navigation-landmark-name-duplicate"
+  | "aria-abstract-role")
 }
 
 ///|
@@ -299,6 +471,8 @@ priv struct AuditContext {
   labels_by_for : Map[String, Array[@dom.Node]]
   page_has_nonempty_title : Bool
   first_page_title_path : String?
+  main_paths : Array[String]
+  navigation_nodes : Array[(@dom.Node, String)]
   is_document : Bool
 }
 
@@ -309,6 +483,8 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
   let id_table_paths : Map[String, Array[String?]] = Map([])
   let labels_by_for : Map[String, Array[@dom.Node]] = Map([])
   let page_titles : Array[(@dom.Node, String)] = []
+  let main_paths : Array[String] = []
+  let navigation_nodes : Array[(@dom.Node, String)] = []
   index_context_children(
     root,
     "",
@@ -319,6 +495,8 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
     id_table_paths,
     labels_by_for,
     page_titles,
+    main_paths,
+    navigation_nodes,
   )
   let mut page_has_nonempty_title = false
   let mut first_page_title_path = None
@@ -340,6 +518,8 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
     labels_by_for,
     page_has_nonempty_title,
     first_page_title_path,
+    main_paths,
+    navigation_nodes,
     is_document,
   }
 }
@@ -355,6 +535,8 @@ fn index_context_children(
   id_table_paths : Map[String, Array[String?]],
   labels_by_for : Map[String, Array[@dom.Node]],
   page_titles : Array[(@dom.Node, String)],
+  main_paths : Array[String],
+  navigation_nodes : Array[(@dom.Node, String)],
 ) -> Unit {
   let children = node.children()
   let mut position = 0
@@ -376,18 +558,24 @@ fn index_context_children(
       if child_inside_head && name == "title" {
         page_titles.push((child, path))
       }
+      if name == "main" {
+        main_paths.push(path)
+      }
+      if name == "nav" {
+        navigation_nodes.push((child, path))
+      }
       // Template contents are inert markup, not part of this audit's input
       // scope. The template element itself can still be indexed.
       if name != "template" {
         index_context_children(
           child, path, child_inside_head, child_table_path, id_nodes, id_paths, id_table_paths,
-          labels_by_for, page_titles,
+          labels_by_for, page_titles, main_paths, navigation_nodes,
         )
       }
     } else {
       index_context_children(
         child, parent_path, inside_head, enclosing_table_path, id_nodes, id_paths,
-        id_table_paths, labels_by_for, page_titles,
+        id_table_paths, labels_by_for, page_titles, main_paths, navigation_nodes,
       )
     }
     position = position + 1
@@ -463,9 +651,12 @@ fn collect_findings(
   parent_path : String,
   enclosing_table_path : String?,
   findings : Array[Finding],
+  review_items : Array[ReviewItem],
   enabled_rule_ids : Array[String],
   previous_heading_level : Int?,
   context : AuditContext,
+  aria_hidden_ancestor : Bool,
+  seen_navigation_names : Array[String],
 ) -> Int? {
   let children = node.children()
   let mut last_heading_level = previous_heading_level
@@ -481,6 +672,7 @@ fn collect_findings(
       } else {
         enclosing_table_path
       }
+      let hidden_by_aria = aria_hidden_ancestor || has_aria_hidden_true(child)
       if context.is_document && name == "html" {
         if is_rule_enabled(enabled_rule_ids, "html-lang-missing") &&
           !has_nonempty_attribute(child, "lang") {
@@ -491,6 +683,35 @@ fn collect_findings(
           context.first_page_title_path is None {
           findings.push(missing_document_title_finding(child, path))
         }
+      }
+      if context.is_document &&
+        name == "body" &&
+        is_rule_enabled(enabled_rule_ids, "body-aria-hidden") &&
+        has_aria_hidden_true(child) {
+        findings.push(body_aria_hidden_finding(child, path))
+      }
+      if context.is_document &&
+        name == "main" &&
+        is_rule_enabled(enabled_rule_ids, "multiple-main") &&
+        context.main_paths.length() > 1 &&
+        context.main_paths[0] != path {
+        findings.push(multiple_main_finding(child, path))
+      }
+      if context.is_document &&
+        name == "nav" &&
+        context.navigation_nodes.length() > 1 {
+        collect_navigation_landmark_findings(
+          child, path, findings, review_items, enabled_rule_ids, context, seen_navigation_names,
+        )
+      }
+      if is_rule_enabled(enabled_rule_ids, "aria-abstract-role") &&
+        has_abstract_role_token(child) {
+        findings.push(abstract_role_finding(child, path))
+      }
+      if is_rule_enabled(enabled_rule_ids, "aria-hidden-focus-review") &&
+        hidden_by_aria &&
+        is_potentially_focusable(child) {
+        review_items.push(aria_hidden_focus_review_item(child, path))
       }
       if context.is_document &&
         name == "title" &&
@@ -561,19 +782,201 @@ fn collect_findings(
       }
       if name != "template" {
         last_heading_level = collect_findings(
-          child, path, child_table_path, findings, enabled_rule_ids, last_heading_level,
-          context,
+          child, path, child_table_path, findings, review_items, enabled_rule_ids,
+          last_heading_level, context, hidden_by_aria, seen_navigation_names,
         )
       }
     } else {
       last_heading_level = collect_findings(
-        child, parent_path, enclosing_table_path, findings, enabled_rule_ids, last_heading_level,
-        context,
+        child, parent_path, enclosing_table_path, findings, review_items, enabled_rule_ids,
+        last_heading_level, context, aria_hidden_ancestor, seen_navigation_names,
       )
     }
     position = position + 1
   }
   last_heading_level
+}
+
+///|
+fn has_aria_hidden_true(node : @dom.Node) -> Bool {
+  match node.attrs().get("aria-hidden") {
+    Some(Some(value)) => value.trim().to_lower() == "true"
+    _ => false
+  }
+}
+
+///|
+fn is_potentially_focusable(node : @dom.Node) -> Bool {
+  has_explicit_tabindex(node) || is_natively_focusable(node)
+}
+
+///|
+fn has_explicit_tabindex(node : @dom.Node) -> Bool {
+  match node.attrs().get("tabindex") {
+    Some(Some(value)) => !value.trim().is_empty()
+    _ => false
+  }
+}
+
+///|
+fn is_natively_focusable(node : @dom.Node) -> Bool {
+  match node.name() {
+    "a" | "area" => node.attrs().get("href") is Some(_)
+    "button" | "select" | "textarea" => !has_disabled_attribute(node)
+    "input" =>
+      if has_disabled_attribute(node) {
+        false
+      } else {
+        match node.attrs().get("type") {
+          Some(Some(type_)) => type_.trim().to_lower() != "hidden"
+          _ => true
+        }
+      }
+    "summary" => true
+    "audio" | "video" => node.attrs().get("controls") is Some(_)
+    "iframe" => true
+    _ => false
+  }
+}
+
+///|
+fn has_disabled_attribute(node : @dom.Node) -> Bool {
+  node.attrs().get("disabled") is Some(_)
+}
+
+///|
+fn collect_navigation_landmark_findings(
+  node : @dom.Node,
+  path : String,
+  findings : Array[Finding],
+  review_items : Array[ReviewItem],
+  enabled_rule_ids : Array[String],
+  context : AuditContext,
+  seen_names : Array[String],
+) -> Unit {
+  match static_landmark_name(node, context) {
+    Some(name) => {
+      if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-duplicate") &&
+        seen_names.contains(name) {
+        findings.push(duplicate_navigation_landmark_name_finding(node, path))
+      }
+      seen_names.push(name)
+    }
+    None =>
+      if has_potential_svg_name_source(node) {
+        if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-missing") {
+          review_items.push(navigation_landmark_name_review_item(node, path))
+        }
+      } else if is_rule_enabled(
+          enabled_rule_ids, "navigation-landmark-name-missing",
+        ) {
+        findings.push(missing_navigation_landmark_name_finding(node, path))
+      }
+  }
+}
+
+///|
+fn static_landmark_name(node : @dom.Node, context : AuditContext) -> String? {
+  match static_name_from_labelledby(node, context) {
+    Some(name) => Some(name)
+    None =>
+      match node.attrs().get("aria-label") {
+        Some(Some(name)) if !name.trim().is_empty() =>
+          Some(name.trim().to_owned())
+        _ =>
+          match node.attrs().get("title") {
+            Some(Some(name)) if !name.trim().is_empty() =>
+              Some(name.trim().to_owned())
+            _ => None
+          }
+      }
+  }
+}
+
+///|
+fn static_name_from_labelledby(
+  node : @dom.Node,
+  context : AuditContext,
+) -> String? {
+  match node.attrs().get("aria-labelledby") {
+    Some(Some(value)) => {
+      let output = StringBuilder()
+      for id in idref_tokens(value) {
+        match context.id_nodes.get(id) {
+          Some([target]) => {
+            let text = static_text_content(target)
+            if !text.trim().is_empty() {
+              if !output.to_string().is_empty() {
+                output.write_string(" ")
+              }
+              output.write_string(text.trim().to_owned())
+            }
+          }
+          _ => ()
+        }
+      }
+      let name = output.to_string().trim().to_owned()
+      if name.is_empty() {
+        None
+      } else {
+        Some(name)
+      }
+    }
+    _ => None
+  }
+}
+
+///|
+fn static_text_content(node : @dom.Node) -> String {
+  let output = StringBuilder()
+  append_static_text_content(node, output)
+  output.to_string()
+}
+
+///|
+fn append_static_text_content(node : @dom.Node, output : StringBuilder) -> Unit {
+  if node.kind() is @dom.Text {
+    output.write_string(node.data())
+    return
+  }
+  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
+    return
+  }
+  if node.kind() is @dom.Element && node.name() == "img" {
+    match node.attrs().get("alt") {
+      Some(Some(alt)) if !alt.trim().is_empty() =>
+        output.write_string(alt.trim().to_owned())
+      _ => ()
+    }
+  }
+  for child in node.children() {
+    append_static_text_content(child, output)
+  }
+}
+
+///|
+fn has_abstract_role_token(node : @dom.Node) -> Bool {
+  match node.attrs().get("role") {
+    Some(Some(value)) => idref_tokens(value).any(is_abstract_aria_role)
+    _ => false
+  }
+}
+
+///|
+fn is_abstract_aria_role(role : String) -> Bool {
+  role.to_lower()
+  is ("command"
+  | "composite"
+  | "input"
+  | "landmark"
+  | "range"
+  | "roletype"
+  | "section"
+  | "sectionhead"
+  | "select"
+  | "structure"
+  | "widget"
+  | "window")
 }
 
 ///|
@@ -1094,6 +1497,103 @@ fn missing_area_alt_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "area-alt-missing",
     message: "This clickable image-map area has no non-empty alt text.",
     suggestion: "Add non-empty alt text that identifies this area's destination or action.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn body_aria_hidden_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "body-aria-hidden",
+    message: "This document hides its body from the accessibility tree.",
+    suggestion: "Remove aria-hidden=\"true\" from body and hide only the specific inactive content when appropriate.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn multiple_main_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "multiple-main",
+    message: "This document has more than one main element.",
+    suggestion: "Review the page structure and keep one primary main landmark unless a documented exception applies.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_navigation_landmark_name_finding(
+  node : @dom.Node,
+  path : String,
+) -> Finding {
+  {
+    rule_id: "navigation-landmark-name-missing",
+    message: "This page has multiple navigation landmarks, and this one has no static distinguishing name.",
+    suggestion: "Add a non-empty aria-label, aria-labelledby reference, or title that distinguishes this navigation landmark.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn duplicate_navigation_landmark_name_finding(
+  node : @dom.Node,
+  path : String,
+) -> Finding {
+  {
+    rule_id: "navigation-landmark-name-duplicate",
+    message: "This navigation landmark repeats a static name used by an earlier navigation landmark.",
+    suggestion: "Give same-type navigation landmarks distinct names when users need to tell them apart.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn abstract_role_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "aria-abstract-role",
+    message: "This role attribute contains an abstract ARIA role token.",
+    suggestion: "Use a concrete ARIA role or remove the abstract role token.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn aria_hidden_focus_review_item(node : @dom.Node, path : String) -> ReviewItem {
+  let tabindex_reason = match node.attrs().get("tabindex") {
+    Some(Some(value)) if value.trim() == "-1" =>
+      "This aria-hidden subtree contains tabindex=\"-1\". Programmatic focus and CSS/runtime state require browser review."
+    _ =>
+      "This aria-hidden subtree contains a potentially focusable element. CSS and runtime focus state require browser review."
+  }
+  {
+    rule_id: "aria-hidden-focus-review",
+    reason: tabindex_reason,
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn navigation_landmark_name_review_item(
+  node : @dom.Node,
+  path : String,
+) -> ReviewItem {
+  {
+    rule_id: "navigation-landmark-name-missing",
+    reason: "This navigation landmark may derive a name from SVG or runtime content, which static HTML cannot determine reliably.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),
