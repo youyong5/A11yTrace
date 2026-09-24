@@ -1,6 +1,13 @@
 ///|
 #coverage.skip
 fn main {
+  let catalog = @a11ytrace.available_rules()
+  println("built-in rules: \{catalog.length()}")
+  match @a11ytrace.rule_metadata("aria-hidden-focus-review") {
+    Some(rule) => println("review rule: \{rule.id} — \{rule.summary}")
+    None => panic()
+  }
+  println("manual-review selection: \{@a11ytrace.review_rule_ids().length()}")
   let detailed = @a11ytrace.audit_html_fragment_detailed(
     "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
   )

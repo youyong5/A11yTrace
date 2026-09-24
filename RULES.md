@@ -6,6 +6,17 @@
 
 All selected rules use one recovered DOM and report findings in document order. Rule selection does not implement or imply a conformance profile: in particular, `heading-level-skipped` remains an advisory structural-review rule.
 
+## Rule directory
+
+`available_rules()` returns the same stable built-in ordering as
+`available_rule_ids()`, with copied `RuleMetadata` records. A record declares
+its ID, concise purpose, category, input scope, result kind, reference URL, and
+explicit static-analysis boundary. `rule_metadata(id)` queries one record.
+`content_rule_ids()`, `document_rule_ids()`, and `review_rule_ids()` provide
+fresh named selections without changing the existing explicit-ID API. The
+directory is the code source of truth for valid IDs, not a second documentation
+list.
+
 ## Input scope and shared context
 
 `audit_html_fragment` always treats its input as a component-local fragment.
@@ -144,6 +155,53 @@ definite findings plus diagnostics. The corresponding detailed selection APIs
 return `DetailedConfiguredAuditResult`, so selecting `aria-hidden-focus-review`
 does not silently discard review items; unknown IDs remain explicit configuration
 errors before parsing.
+
+## `meta-refresh-delay`
+
+For complete-document input only, reports `meta[http-equiv="refresh"]` when
+the first semicolon-delimited `content` token is a supported decimal number
+greater than zero. Attribute and token whitespace are trimmed and
+`http-equiv` matching is case-insensitive. `0`, `0.0`, and `00.0` do not
+report; malformed, signed, exponent, and policy-specific long-delay forms are
+left outside this narrow static check. A fragment never receives this page
+timing rule.
+
+The behavior is calibrated against HTML-Validate's
+[meta-refresh rule](https://html-validate.org/rules/meta-refresh.html), but
+A11yTrace intentionally does not reproduce its refresh-loop or configurable
+long-delay policy.
+
+## `aria-state-value-invalid`
+
+Reports one finding on an element when a non-empty value for one of this
+explicitly supported set is invalid after trimming and ASCII case folding:
+
+- Boolean: `aria-busy`, `aria-disabled`, `aria-modal`,
+  `aria-multiline`, `aria-multiselectable`, `aria-readonly`, `aria-required`.
+- True/false/undefined: `aria-expanded`, `aria-hidden`.
+- Tristate: `aria-checked`, `aria-pressed`.
+- Token sets: `aria-current` (`false`, `true`, `page`, `step`, `location`,
+  `date`, `time`) and `aria-invalid` (`false`, `true`, `grammar`, `spelling`).
+
+Empty values and every unlisted ARIA attribute are deliberately ignored. This
+is not a general ARIA validator: it does not check attribute permission,
+numeric, IDREF, token-list, role-dependent, SVG, or browser mapping semantics.
+The scope is informed by [W3C ACT rule 6a7281](https://www.w3.org/WAI/standards-guidelines/act/rules/6a7281/),
+which covers a broader set of ARIA values.
+
+## `button-implicit-submit`
+
+Provides a static best-practice prompt for a native `<button>` inside a form
+when its `type` is missing or empty. In HTML that button defaults to submit,
+which can make a non-submit action unexpectedly submit the form. Explicit
+`type="button"` and `type="submit"` do not report, and neither do buttons
+outside a form. Invalid type values, associated forms using the `form`
+attribute, custom buttons, and the quality of a form's submission behavior are
+outside this focused prompt.
+
+The rule is informed by HTML-Validate's
+[no-implicit-button-type](https://html-validate.org/rules/no-implicit-button-type.html)
+rule. Its result kind is `StaticHint`; it is not presented as a WCAG violation.
 
 ## `body-aria-hidden`
 

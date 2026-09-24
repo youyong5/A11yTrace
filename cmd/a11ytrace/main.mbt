@@ -2,6 +2,7 @@
 enum OutputFormat {
   Text
   Json
+  DetailedJson
 } derive(Eq)
 
 ///|
@@ -39,6 +40,10 @@ async fn run_audit(config : CliConfig) -> Unit {
       return
     }
   }
+  if config.format is DetailedJson {
+    run_detailed_audit(html, config.rule_ids)
+    return
+  }
   let result = match config.rule_ids {
     None => @a11ytrace_lib.audit_html(html)
     Some(rule_ids) =>
@@ -53,7 +58,24 @@ async fn run_audit(config : CliConfig) -> Unit {
   match config.format {
     Json => write_stdout(@a11ytrace_lib.render_audit_json(result) + "\n")
     Text => write_stdout(render_text(result))
+    DetailedJson => ()
   }
+}
+
+///|
+async fn run_detailed_audit(html : String, rule_ids : Array[String]?) -> Unit {
+  let result = match rule_ids {
+    None => @a11ytrace_lib.audit_html_detailed(html)
+    Some(ids) =>
+      match @a11ytrace_lib.audit_html_detailed_with_rules(html, ids) {
+        Audited(result) => result
+        ConfigurationError(UnknownRuleId(rule_id)) => {
+          write_stderr("error: unknown A11yTrace rule ID: \{rule_id}\n")
+          return
+        }
+      }
+  }
+  write_stdout(@a11ytrace_lib.render_detailed_audit_json(result) + "\n")
 }
 
 ///|
@@ -68,7 +90,7 @@ fn parse_cli_args(args : ArrayView[String]) -> CliPlan {
       "--help" | "-h" => return Help
       "--format" => {
         if index + 1 >= args.length() {
-          return ArgumentError("--format requires text or json")
+          return ArgumentError("--format requires text, json, or detailed-json")
         }
         if format_supplied {
           return ArgumentError("--format may be provided only once")
@@ -76,6 +98,7 @@ fn parse_cli_args(args : ArrayView[String]) -> CliPlan {
         match args[index + 1] {
           "text" => format = Text
           "json" => format = Json
+          "detailed-json" => format = DetailedJson
           value => return ArgumentError("unsupported format: \{value}")
         }
         format_supplied = true
@@ -184,13 +207,14 @@ fn append_location(output : StringBuilder, line : Int?, column : Int?) -> Unit {
 ///|
 fn usage_text() -> String {
   (
-    #|Usage: a11ytrace <file.html> [--format text|json] [--rules id1,id2]
+    #|Usage: a11ytrace <file.html> [--format text|json|detailed-json] [--rules id1,id2]
     #|
     #|Audit one local HTML file with A11yTrace.
     #|
     #|Options:
     #|  -h, --help              Show this help text.
-    #|  --format text|json      Output text (default) or JSON.
+    #|  --format text|json|detailed-json
+    #|                          Output text (default), compatible JSON, or detailed JSON with review items.
     #|  --rules id1,id2         Run only these rule IDs; an empty value runs no rules.
   ).to_string()
 }

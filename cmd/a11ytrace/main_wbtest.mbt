@@ -15,6 +15,18 @@ test "parses a file format and selected rules" {
 }
 
 ///|
+test "parses detailed JSON without changing compatible JSON" {
+  match parse_cli_args(["page.html", "--format", "detailed-json"]) {
+    Audit({ format: DetailedJson, .. }) => ()
+    _ => fail("detailed JSON must be an explicit format")
+  }
+  match parse_cli_args(["page.html", "--format", "json"]) {
+    Audit({ format: Json, .. }) => ()
+    _ => fail("the established JSON format must remain available")
+  }
+}
+
+///|
 test "parses help and rejects invalid command lines" {
   assert_true(parse_cli_args(["--help"]) is Help)
   assert_true(parse_cli_args([]) is ArgumentError(_))

@@ -504,6 +504,113 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 }
 
 ///|
+test "rule directory exposes stable metadata and copied rule selections" {
+  let rules = @a11ytrace.available_rules()
+  assert_eq(rules.length(), 22)
+  assert_eq(rules[0].id, "img-alt-missing")
+  assert_eq(rules[19].id, "meta-refresh-delay")
+  assert_eq(rules[20].id, "aria-state-value-invalid")
+  assert_eq(rules[21].id, "button-implicit-submit")
+  rules[0] = {
+    id: "changed",
+    summary: "changed",
+    category: @a11ytrace.RuleCategory::Aria,
+    scope: @a11ytrace.RuleScope::Fragment,
+    result_kind: @a11ytrace.RuleResultKind::ManualReview,
+    reference_url: "https://example.test/",
+    boundary: "changed",
+  }
+  assert_eq(@a11ytrace.available_rules()[0].id, "img-alt-missing")
+  match @a11ytrace.rule_metadata("aria-hidden-focus-review") {
+    Some(rule) => {
+      assert_eq(
+        rule.reference_url,
+        "https://www.w3.org/WAI/standards-guidelines/act/rules/6cfa84/",
+      )
+      assert_true(rule.result_kind is @a11ytrace.RuleResultKind::ManualReview)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+    }
+    None => fail("known rule metadata must be available")
+  }
+  assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
+  let content_ids = @a11ytrace.content_rule_ids()
+  assert_true(content_ids.contains("img-alt-missing"))
+  assert_true(!content_ids.contains("document-title-missing"))
+  let document_ids = @a11ytrace.document_rule_ids()
+  assert_true(document_ids.contains("document-title-missing"))
+  assert_true(document_ids.contains("meta-refresh-delay"))
+  assert_eq(@a11ytrace.review_rule_ids(), ["aria-hidden-focus-review"])
+}
+
+///|
+test "reports supported nonzero meta refresh delays in complete documents only" {
+  let page = "<!doctype html><html lang=\"en\"><head><title>Page</title>" +
+    "<meta http-equiv=\"REFRESH\" content=\" 5;url=/next\">" +
+    "<meta http-equiv=\"refresh\" content=\".5\">" +
+    "<meta http-equiv=\"refresh\" content=\"0;url=/next\">" +
+    "<meta http-equiv=\"refresh\" content=\"00.0\">" +
+    "<meta http-equiv=\"refresh\" content=\"five\"></head><body></body></html>"
+  match @a11ytrace.audit_html_with_rules(page, ["meta-refresh-delay"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "meta-refresh-delay")
+      assert_eq(findings[1].rule_id, "meta-refresh-delay")
+    }
+    _ => fail("supported nonzero document refresh delays should be reported")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<meta http-equiv=\"refresh\" content=\"5\">",
+      ["meta-refresh-delay"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    _ => fail("fragment audit must not run page timing rules")
+  }
+}
+
+///|
+test "checks only documented ARIA state token types" {
+  let html = "<button aria-expanded=\" TRUE \" aria-pressed=\"mixed\"></button>" +
+    "<span aria-current=\"PAGE\" aria-invalid=\"grammar\"></span>" +
+    "<div aria-hidden=\"undefined\" aria-checked=\"undefined\"></div>" +
+    "<div aria-expanded=\"yes\"></div><div aria-checked=\"maybe\"></div>" +
+    "<div aria-current=\"later\"></div>"
+  match @a11ytrace.audit_html_with_rules(html, ["aria-state-value-invalid"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      for finding in findings {
+        assert_eq(finding.rule_id, "aria-state-value-invalid")
+      }
+    }
+    _ => fail("invalid values for selected ARIA states should be reported")
+  }
+}
+
+///|
+test "suggests explicit button types only for missing or empty form buttons" {
+  let html = "<form><button>Save</button><button type=\"\">Cancel</button>" +
+    "<button type=\"submit\">Submit</button><button type=\"button\">Preview</button></form>" +
+    "<button>Outside</button>"
+  match @a11ytrace.audit_html_with_rules(html, ["button-implicit-submit"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(
+        findings[0].element_path,
+        "form:nth-of-type(1) > button:nth-of-type(1)",
+      )
+      assert_eq(
+        findings[1].element_path,
+        "form:nth-of-type(1) > button:nth-of-type(2)",
+      )
+    }
+    _ =>
+      fail(
+        "only implicit form submit buttons should receive a best-practice prompt",
+      )
+  }
+}
+
+///|
 test "does not audit anchors without href and conservatively skips svg links" {
   match
     @a11ytrace.audit_html(
@@ -758,7 +865,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 19)
+  assert_eq(rule_ids.length(), 22)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -768,6 +875,9 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_eq(rule_ids[12], "area-alt-missing")
   assert_eq(rule_ids[13], "aria-hidden-focus-review")
   assert_eq(rule_ids[18], "aria-abstract-role")
+  assert_eq(rule_ids[19], "meta-refresh-delay")
+  assert_eq(rule_ids[20], "aria-state-value-invalid")
+  assert_eq(rule_ids[21], "button-implicit-submit")
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")

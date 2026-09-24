@@ -84,6 +84,45 @@ pub(all) enum RuleConfigurationError {
 }
 
 ///|
+/// A broad grouping used by the stable rule directory.
+pub(all) enum RuleCategory {
+  ContentName
+  DocumentStructure
+  Interaction
+  Relationships
+  Aria
+  Timing
+}
+
+///|
+/// The input scope in which a rule is evaluated.
+pub(all) enum RuleScope {
+  Document
+  Fragment
+  DocumentOrFragment
+}
+
+///|
+/// The confidence represented by a rule's output.
+pub(all) enum RuleResultKind {
+  ConfirmedFinding
+  StaticHint
+  ManualReview
+}
+
+///|
+/// Stable, read-only metadata describing one built-in rule.
+pub(all) struct RuleMetadata {
+  id : String
+  summary : String
+  category : RuleCategory
+  scope : RuleScope
+  result_kind : RuleResultKind
+  reference_url : String
+  boundary : String
+}
+
+///|
 /// Audit HTML with the rules currently implemented by A11yTrace.
 ///
 /// This is a pure operation: it performs no file I/O and can be used by a
@@ -134,6 +173,45 @@ pub fn audit_html_detailed_with_rules(
 /// Return the stable IDs accepted by `audit_html_with_rules`.
 pub fn available_rule_ids() -> Array[String] {
   all_rule_ids()
+}
+
+///|
+/// Return copied metadata for every built-in rule in stable ID order.
+pub fn available_rules() -> Array[RuleMetadata] {
+  rule_catalog()
+}
+
+///|
+/// Look up copied metadata for one built-in rule ID.
+pub fn rule_metadata(rule_id : String) -> RuleMetadata? {
+  for rule in rule_catalog() {
+    if rule.id == rule_id {
+      return Some(rule)
+    }
+  }
+  None
+}
+
+///|
+/// Return the content-name rule IDs as a convenient selection.
+pub fn content_rule_ids() -> Array[String] {
+  rule_ids_for_category(ContentName)
+}
+
+///|
+/// Return the complete-document structural rule IDs as a convenient selection.
+pub fn document_rule_ids() -> Array[String] {
+  rule_catalog()
+  .filter(fn(rule) { rule.scope is Document })
+  .map(fn(rule) { rule.id })
+}
+
+///|
+/// Return the rule IDs that can produce manual-review items.
+pub fn review_rule_ids() -> Array[String] {
+  rule_catalog()
+  .filter(fn(rule) { rule.result_kind is ManualReview })
+  .map(fn(rule) { rule.id })
 }
 
 ///|
@@ -410,12 +488,230 @@ fn looks_like_html_document(source : String) -> Bool {
 
 ///|
 fn all_rule_ids() -> Array[String] {
+  rule_catalog().map(fn(rule) { rule.id })
+}
+
+///|
+fn rule_ids_for_category(category : RuleCategory) -> Array[String] {
+  rule_catalog()
+  .filter(fn(rule) { rule_category_matches(rule.category, category) })
+  .map(fn(rule) { rule.id })
+}
+
+///|
+fn rule_category_matches(left : RuleCategory, right : RuleCategory) -> Bool {
+  match (left, right) {
+    (ContentName, ContentName) => true
+    (DocumentStructure, DocumentStructure) => true
+    (Interaction, Interaction) => true
+    (Relationships, Relationships) => true
+    (Aria, Aria) => true
+    (Timing, Timing) => true
+    _ => false
+  }
+}
+
+///|
+fn rule_catalog() -> Array[RuleMetadata] {
   [
-    "img-alt-missing", "form-control-name-missing", "link-name-missing", "button-name-missing",
-    "heading-level-skipped", "heading-name-missing", "document-title-missing", "html-lang-missing",
-    "iframe-name-missing", "duplicate-id", "reference-target-invalid", "table-headers-invalid",
-    "area-alt-missing", "aria-hidden-focus-review", "body-aria-hidden", "multiple-main",
-    "navigation-landmark-name-missing", "navigation-landmark-name-duplicate", "aria-abstract-role",
+    {
+      id: "img-alt-missing",
+      summary: "Image omits alt.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/tutorials/images/",
+      boundary: "Checks alt presence, not image purpose or alternative-text quality.",
+    },
+    {
+      id: "form-control-name-missing",
+      summary: "Input control lacks a supported static name.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/tutorials/forms/labels/",
+      boundary: "Selected labels, ARIA, and title sources only; not full accessible-name computation.",
+    },
+    {
+      id: "link-name-missing",
+      summary: "Link with href lacks a supported static name.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/c487ae/",
+      boundary: "Does not judge destination clarity and conservatively skips unresolved SVG naming.",
+    },
+    {
+      id: "button-name-missing",
+      summary: "Native button lacks a supported static name.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/97a4e1/",
+      boundary: "Native buttons only; SVG-only naming and custom roles are outside scope.",
+    },
+    {
+      id: "heading-level-skipped",
+      summary: "Native heading skips downward levels.",
+      category: DocumentStructure,
+      scope: DocumentOrFragment,
+      result_kind: StaticHint,
+      reference_url: "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+      boundary: "A structure prompt only; first heading can be any level.",
+    },
+    {
+      id: "heading-name-missing",
+      summary: "Native heading lacks a supported static name.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+      boundary: "Does not infer visual headings or calculate all browser name sources.",
+    },
+    {
+      id: "document-title-missing",
+      summary: "Complete document has no non-empty title.",
+      category: DocumentStructure,
+      scope: Document,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/2779a5/",
+      boundary: "Checks static head title presence, not descriptive quality or uniqueness.",
+    },
+    {
+      id: "html-lang-missing",
+      summary: "Complete document html element lacks lang.",
+      category: DocumentStructure,
+      scope: Document,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html",
+      boundary: "Does not validate language tags or infer text language.",
+    },
+    {
+      id: "iframe-name-missing",
+      summary: "Iframe lacks a supported static name.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/cae760/proposed/",
+      boundary: "Checks title and selected ARIA sources only.",
+    },
+    {
+      id: "duplicate-id",
+      summary: "Later non-empty ID duplicates an earlier ID.",
+      category: Relationships,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://html-validate.org/rules/no-dup-id.html",
+      boundary: "Compares the recovered input scope; template descendants are excluded.",
+    },
+    {
+      id: "reference-target-invalid",
+      summary: "Selected ID reference has no unique local target.",
+      category: Relationships,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://html-validate.org/rules/no-missing-references.html",
+      boundary: "Covers label for, aria-labelledby, and aria-describedby only.",
+    },
+    {
+      id: "table-headers-invalid",
+      summary: "Table headers reference is not a unique same-table cell.",
+      category: Relationships,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/a25f45/",
+      boundary: "Does not determine semantic header quality or browser fallback association.",
+    },
+    {
+      id: "area-alt-missing",
+      summary: "Clickable image-map area lacks non-empty alt.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/c487ae/",
+      boundary: "Only area elements with href are checked.",
+    },
+    {
+      id: "aria-hidden-focus-review",
+      summary: "Potential focus in an aria-hidden subtree needs browser review.",
+      category: Aria,
+      scope: DocumentOrFragment,
+      result_kind: ManualReview,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/6cfa84/",
+      boundary: "CSS, scripts, and sequential focus state are not statically known.",
+    },
+    {
+      id: "body-aria-hidden",
+      summary: "Document body is hidden from the accessibility tree.",
+      category: Aria,
+      scope: Document,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/6cfa84/",
+      boundary: "Checks only static body aria-hidden=true.",
+    },
+    {
+      id: "multiple-main",
+      summary: "Complete document has multiple native main landmarks.",
+      category: DocumentStructure,
+      scope: Document,
+      result_kind: StaticHint,
+      reference_url: "https://html-validate.org/rules/",
+      boundary: "Native main only; it is a structure prompt, not a conformance verdict.",
+    },
+    {
+      id: "navigation-landmark-name-missing",
+      summary: "Repeated navigation landmark lacks a static distinguishing name.",
+      category: DocumentStructure,
+      scope: Document,
+      result_kind: StaticHint,
+      reference_url: "https://html-validate.org/rules/unique-landmark.html",
+      boundary: "Native nav and selected static names only; SVG/runtime names become review items.",
+    },
+    {
+      id: "navigation-landmark-name-duplicate",
+      summary: "Repeated navigation landmark reuses a static name.",
+      category: DocumentStructure,
+      scope: Document,
+      result_kind: StaticHint,
+      reference_url: "https://html-validate.org/rules/unique-landmark.html",
+      boundary: "Native nav and selected static names only.",
+    },
+    {
+      id: "aria-abstract-role",
+      summary: "Role attribute contains an ARIA 1.2 abstract role.",
+      category: Aria,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/TR/wai-aria-1.2/#role_definitions",
+      boundary: "Does not validate all roles, permissions, or fallback processing.",
+    },
+    {
+      id: "meta-refresh-delay",
+      summary: "Meta refresh uses a supported non-zero delay.",
+      category: Timing,
+      scope: Document,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://html-validate.org/rules/meta-refresh.html",
+      boundary: "Recognizes only numeric content delays; refresh-loop and long-delay policy are outside scope.",
+    },
+    {
+      id: "aria-state-value-invalid",
+      summary: "Selected ARIA state has an invalid static token.",
+      category: Aria,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/6a7281/",
+      boundary: "Only documented boolean, tristate, and aria-current tokens are checked.",
+    },
+    {
+      id: "button-implicit-submit",
+      summary: "Form button omits an explicit type.",
+      category: Interaction,
+      scope: DocumentOrFragment,
+      result_kind: StaticHint,
+      reference_url: "https://html-validate.org/rules/no-implicit-button-type.html",
+      boundary: "Only native buttons with missing or empty type inside a form are prompted.",
+    },
   ]
 }
 
@@ -431,26 +727,7 @@ fn unknown_rule_id(rule_ids : Array[String]) -> String? {
 
 ///|
 fn is_available_rule_id(rule_id : String) -> Bool {
-  rule_id
-  is ("img-alt-missing"
-  | "form-control-name-missing"
-  | "link-name-missing"
-  | "button-name-missing"
-  | "heading-level-skipped"
-  | "heading-name-missing"
-  | "document-title-missing"
-  | "html-lang-missing"
-  | "iframe-name-missing"
-  | "duplicate-id"
-  | "reference-target-invalid"
-  | "table-headers-invalid"
-  | "area-alt-missing"
-  | "aria-hidden-focus-review"
-  | "body-aria-hidden"
-  | "multiple-main"
-  | "navigation-landmark-name-missing"
-  | "navigation-landmark-name-duplicate"
-  | "aria-abstract-role")
+  rule_catalog().any(fn(rule) { rule.id == rule_id })
 }
 
 ///|
@@ -708,6 +985,15 @@ fn collect_findings(
         has_abstract_role_token(child) {
         findings.push(abstract_role_finding(child, path))
       }
+      if is_rule_enabled(enabled_rule_ids, "aria-state-value-invalid") &&
+        has_invalid_selected_aria_state(child) {
+        findings.push(invalid_aria_state_value_finding(child, path))
+      }
+      if context.is_document &&
+        is_rule_enabled(enabled_rule_ids, "meta-refresh-delay") &&
+        has_supported_nonzero_meta_refresh_delay(child) {
+        findings.push(meta_refresh_delay_finding(child, path))
+      }
       if is_rule_enabled(enabled_rule_ids, "aria-hidden-focus-review") &&
         hidden_by_aria &&
         is_potentially_focusable(child) {
@@ -748,6 +1034,12 @@ fn collect_findings(
         is_button_to_check(child) &&
         !has_recognizable_button_name(child, context) {
         findings.push(missing_button_name_finding(child, path))
+      }
+      if is_rule_enabled(enabled_rule_ids, "button-implicit-submit") &&
+        name == "button" &&
+        has_implicit_submit_type(child) &&
+        has_form_ancestor(child) {
+        findings.push(implicit_submit_button_finding(child, path))
       }
       if is_rule_enabled(enabled_rule_ids, "iframe-name-missing") &&
         name == "iframe" &&
@@ -980,6 +1272,106 @@ fn is_abstract_aria_role(role : String) -> Bool {
 }
 
 ///|
+fn has_supported_nonzero_meta_refresh_delay(node : @dom.Node) -> Bool {
+  if node.name() != "meta" {
+    return false
+  }
+  match (node.attrs().get("http-equiv"), node.attrs().get("content")) {
+    (Some(Some(http_equiv)), Some(Some(content))) if http_equiv
+      .trim()
+      .to_lower() ==
+      "refresh" => {
+      let mut delay = ""
+      for part in content.split(";") {
+        delay = part.trim().to_owned()
+        break
+      }
+      is_supported_nonzero_decimal(delay)
+    }
+    _ => false
+  }
+}
+
+///|
+fn is_supported_nonzero_decimal(value : String) -> Bool {
+  if value.is_empty() {
+    return false
+  }
+  let non_decimal = value
+    .replace_all(old="0", new="")
+    .replace_all(old="1", new="")
+    .replace_all(old="2", new="")
+    .replace_all(old="3", new="")
+    .replace_all(old="4", new="")
+    .replace_all(old="5", new="")
+    .replace_all(old="6", new="")
+    .replace_all(old="7", new="")
+    .replace_all(old="8", new="")
+    .replace_all(old="9", new="")
+    .replace_all(old=".", new="")
+  if !non_decimal.is_empty() {
+    return false
+  }
+  let nonzero = value.replace_all(old="0", new="").replace_all(old=".", new="")
+  !nonzero.is_empty()
+}
+
+///|
+fn has_invalid_selected_aria_state(node : @dom.Node) -> Bool {
+  has_invalid_aria_token(node, "aria-busy", is_true_false) ||
+  has_invalid_aria_token(node, "aria-disabled", is_true_false) ||
+  has_invalid_aria_token(node, "aria-expanded", is_true_false_or_undefined) ||
+  has_invalid_aria_token(node, "aria-hidden", is_true_false_or_undefined) ||
+  has_invalid_aria_token(node, "aria-modal", is_true_false) ||
+  has_invalid_aria_token(node, "aria-multiline", is_true_false) ||
+  has_invalid_aria_token(node, "aria-multiselectable", is_true_false) ||
+  has_invalid_aria_token(node, "aria-readonly", is_true_false) ||
+  has_invalid_aria_token(node, "aria-required", is_true_false) ||
+  has_invalid_aria_token(node, "aria-checked", is_tristate) ||
+  has_invalid_aria_token(node, "aria-pressed", is_tristate) ||
+  has_invalid_aria_token(node, "aria-current", is_current_token) ||
+  has_invalid_aria_token(node, "aria-invalid", is_invalid_token)
+}
+
+///|
+fn has_invalid_aria_token(
+  node : @dom.Node,
+  attribute : String,
+  is_allowed : (String) -> Bool,
+) -> Bool {
+  match node.attrs().get(attribute) {
+    Some(Some(value)) if !value.trim().is_empty() =>
+      !is_allowed(value.trim().to_lower().to_owned())
+    _ => false
+  }
+}
+
+///|
+fn is_true_false(value : String) -> Bool {
+  value is ("true" | "false")
+}
+
+///|
+fn is_true_false_or_undefined(value : String) -> Bool {
+  value is ("true" | "false" | "undefined")
+}
+
+///|
+fn is_tristate(value : String) -> Bool {
+  value is ("true" | "false" | "mixed" | "undefined")
+}
+
+///|
+fn is_current_token(value : String) -> Bool {
+  value is ("false" | "true" | "page" | "step" | "location" | "date" | "time")
+}
+
+///|
+fn is_invalid_token(value : String) -> Bool {
+  value is ("false" | "true" | "grammar" | "spelling")
+}
+
+///|
 fn heading_level(node : @dom.Node) -> Int? {
   match node.name() {
     "h1" => Some(1)
@@ -1015,6 +1407,27 @@ fn is_button_to_check(node : @dom.Node) -> Bool {
       }
     _ => false
   }
+}
+
+///|
+fn has_implicit_submit_type(button : @dom.Node) -> Bool {
+  match button.attrs().get("type") {
+    None => true
+    Some(Some(value)) => value.trim().is_empty()
+    Some(None) => true
+  }
+}
+
+///|
+fn has_form_ancestor(node : @dom.Node) -> Bool {
+  let mut ancestor = node.parent()
+  while ancestor is Some(parent) {
+    if parent.kind() is @dom.Element && parent.name() == "form" {
+      return true
+    }
+    ancestor = parent.parent()
+  }
+  false
 }
 
 ///|
@@ -1444,6 +1857,30 @@ fn missing_html_lang_finding(node : @dom.Node, path : String) -> Finding {
 }
 
 ///|
+fn meta_refresh_delay_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "meta-refresh-delay",
+    message: "This meta refresh uses a non-zero delay.",
+    suggestion: "Avoid timed refreshes; if a static redirect is necessary, use an immediate 0-second redirect.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn invalid_aria_state_value_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "aria-state-value-invalid",
+    message: "This element has an invalid value for a selected ARIA state.",
+    suggestion: "Use the documented token for the ARIA attribute, or remove the attribute when it is not applicable.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
 fn missing_iframe_name_finding(node : @dom.Node, path : String) -> Finding {
   {
     rule_id: "iframe-name-missing",
@@ -1633,6 +2070,18 @@ fn missing_button_name_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "button-name-missing",
     message: "This button has no recognizable accessible name.",
     suggestion: "Add visible button text, a non-empty value or alt attribute as appropriate, aria-label, aria-labelledby, or title.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn implicit_submit_button_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "button-implicit-submit",
+    message: "This button inside a form has no explicit type and therefore defaults to submit.",
+    suggestion: "Set type=\"button\" for a non-submit action or type=\"submit\" when submission is intended.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

@@ -20,9 +20,19 @@ pub fn audit_html_with_rules(String, Array[String]) -> ConfiguredAuditResult
 
 pub fn available_rule_ids() -> Array[String]
 
+pub fn available_rules() -> Array[RuleMetadata]
+
+pub fn content_rule_ids() -> Array[String]
+
+pub fn document_rule_ids() -> Array[String]
+
 pub fn render_audit_json(AuditResult) -> String
 
 pub fn render_detailed_audit_json(DetailedAuditResult) -> String
+
+pub fn review_rule_ids() -> Array[String]
+
+pub fn rule_metadata(String) -> RuleMetadata?
 
 // Errors
 
@@ -80,8 +90,39 @@ pub(all) struct ReviewItem {
   column : Int?
 }
 
+pub(all) enum RuleCategory {
+  ContentName
+  DocumentStructure
+  Interaction
+  Relationships
+  Aria
+  Timing
+}
+
 pub(all) enum RuleConfigurationError {
   UnknownRuleId(String)
+}
+
+pub(all) struct RuleMetadata {
+  id : String
+  summary : String
+  category : RuleCategory
+  scope : RuleScope
+  result_kind : RuleResultKind
+  reference_url : String
+  boundary : String
+}
+
+pub(all) enum RuleResultKind {
+  ConfirmedFinding
+  StaticHint
+  ManualReview
+}
+
+pub(all) enum RuleScope {
+  Document
+  Fragment
+  DocumentOrFragment
 }
 
 // Type aliases

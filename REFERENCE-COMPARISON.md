@@ -31,8 +31,36 @@ parsing, but does not copy the source code of any auditing tool.
 | `aria-hidden` and focus conflicts | Partially supported | Potentially focusable descendants are emitted as review items; A11yTrace does not assert a rendered focus conflict without CSS and runtime information. |
 | Native landmark structure and names | Partially supported | It checks multiple `main` elements and distinguishes multiple native navigation landmarks using selected static naming sources only. |
 | ARIA role validity | Partially supported | It detects the complete ARIA 1.2 abstract-role set; it intentionally does not claim to validate all concrete roles or fallback behavior. |
+| Selected ARIA state value tokens | Partially supported | A11yTrace validates only a documented small set of boolean, tristate, and token-valued attributes; ACT 6a7281 is broader. |
+| Timed meta refresh | Partially supported | Complete documents with a supported numeric non-zero delay are reported; loop detection and HTML-Validate's long-delay option are not implemented. |
 | Script-created or runtime-mutated DOM state | Not supported automatically | The library audits only the supplied static markup. |
 
 The comparison is deliberately not a coverage claim for HTML-Validate,
 axe-core, WCAG, or ACT. A finding is a focused static signal; absence of a
 finding means only that the implemented checks did not detect an issue.
+
+## Reproducible development comparison
+
+The fixtures in `examples/comparison/` are authored for this repository. They
+are not copied from HTML-Validate and HTML-Validate is not a MoonBit dependency
+or a runtime dependency of A11yTrace. With Node.js and `npx`, this independent
+development-only comparison was run on 2026-09-24 with HTML-Validate 11.16.0:
+
+```text
+npx --yes html-validate@11.16.0 --rule meta-refresh:2 examples/comparison/meta-refresh-delay.html
+npx --yes html-validate@11.16.0 --rule no-dup-id:2 examples/comparison/duplicate-id.html
+```
+
+| Fixture | Shared semantic result | Intentional difference |
+| --- | --- | --- |
+| `meta-refresh-delay.html` | A11yTrace `meta-refresh-delay` and HTML-Validate `meta-refresh` both report the five-second refresh. | HTML-Validate also diagnoses instant refresh loops and offers a long-delay option; A11yTrace does neither. |
+| `duplicate-id.html` | A11yTrace `duplicate-id` and HTML-Validate `no-dup-id` both report the second `duplicate` ID. | A11yTrace attaches its stable element path and uses the same index to make ARIA references ambiguous; it does not validate ID syntax. |
+
+This small comparison demonstrates selected aligned semantics only. It is not a
+claim of equivalent configuration, parser behavior, rule coverage, or output
+format. A custom-rule extension was deliberately not added in this batch:
+exposing the parser DOM or mutable audit context would not yet give external
+MoonBit packages a stable, read-only context contract across targets. The rule
+metadata directory and explicit ID selection are kept stable first; a future
+extension would need a separately versioned public context and cross-package
+execution tests.
