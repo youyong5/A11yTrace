@@ -26,6 +26,6 @@ Run the in-module consumer example from the repository root:
 moon run --target native examples/consumer
 ```
 
-The current rules cover image alt presence; static names for form controls, links, buttons, headings, and iframes; heading skips; complete-document title/language presence; and duplicate IDs in one audited input scope. The checks are deliberately scoped heuristics, not a complete Accessible Name implementation or a WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
+The current rules cover image alt presence; static names for form controls, links, buttons, headings, iframes, and linked image-map areas; heading skips; complete-document title/language presence; duplicate IDs; selected invalid ID references; and same-table `headers` relationships. The checks are deliberately scoped heuristics, not a complete Accessible Name implementation or a WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
 
 See [README.mbt.md](README.mbt.md) for full MoonBit examples, JSON fields, rules, and the native CLI; [RULES.md](RULES.md) for rule boundaries; and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped HTML-Validate/axe-core/ACT comparison and static-analysis limits.

@@ -25,6 +25,15 @@ ARIA references, so cycles terminate safely and do not create a name. A
 duplicate non-empty ID reports every occurrence after the first in the audited
 input scope.
 
+The context deliberately separates a target being uniquely present from it
+having static text. This lets an existing but empty `aria-describedby` target
+remain a valid relationship while an `aria-labelledby` target with no static
+text fails to establish a name. Directly referenced static text is accepted
+even when markup has `hidden` or `aria-hidden`, because this library does not
+compute CSS or the browser accessibility tree. It does not yet implement
+IDREF-derived text alternatives, ARIA name precedence, shadow-DOM lookup, or
+the full Accessible Name and Description Computation.
+
 Parser recovery still produces a recovered DOM and diagnostics. The context is
 built from that recovered DOM; callers should review parser diagnostics before
 treating reference-related results as authoritative.
@@ -73,6 +82,55 @@ markup conservative.
 
 The rule is informed by HTML-Validate's [no-dup-id](https://html-validate.org/rules/no-dup-id.html)
 rule. It does not validate ID syntax; that is a separate concern.
+
+## `reference-target-invalid`
+
+Reports an element with a non-empty ID reference that has no unique target in
+the current audited document or fragment. It covers `label[for]`,
+`aria-labelledby`, and `aria-describedby`. Whitespace-separated ARIA IDREFs
+are checked individually, but produce at most one finding on their source
+element. Empty attributes contain no ID reference and are not reported by this
+rule. A duplicate ID is treated as ambiguous, even though one or more matching
+elements exist.
+
+This is a relationship check, not an accessible-name verdict. For example, a
+control with `aria-label="Email" aria-labelledby="valid missing"` still has a
+static name through `aria-label`, while this rule reports the invalid
+`aria-labelledby` relationship. Conversely, an existing empty
+`aria-describedby` target is not reported here because this rule does not
+judge description quality. `aria-controls` and `input[list]` are not included
+yet; no target-type or runtime ownership claim is made.
+
+The scope follows HTML-Validate's [no-missing-references](https://html-validate.org/rules/no-missing-references.html)
+approach for these selected attributes, with conservative fragment-local
+resolution.
+
+## `table-headers-invalid`
+
+Reports a `headers` token on a `td` or `th` when it does not resolve uniquely
+to another `td` or `th` in the same nearest table. Missing IDs, duplicate IDs,
+non-cell targets, targets in a nested or enclosing table, and self-references
+are invalid. Empty `headers` contains no token and is not reported. A target is
+not restricted to `<th>`: a `td` may participate in a complex association, as
+in the ACT examples.
+
+The check is structural and does not determine CSS visibility, semantic roles,
+whether a cell is actually a useful header, or browser fallback header
+assignment. It is informed by [W3C ACT rule a25f45](https://www.w3.org/WAI/standards-guidelines/act/rules/a25f45/)
+and should not alone be represented as a WCAG conformance result.
+
+## `area-alt-missing`
+
+Reports an `<area>` with an `href` attribute when `alt` is missing, empty, or
+whitespace-only. An `<area>` without `href` is not a clickable image-map link
+for this rule and is not reported. The rule checks only the static `alt`
+attribute; it does not decide whether the destination is clear, whether the
+area belongs to a valid map, or whether browsers expose an out-of-map area in
+their accessibility tree.
+
+The rule is informed by the [W3C ACT link-name rule](https://www.w3.org/WAI/standards-guidelines/act/rules/c487ae/),
+which uses `alt` for linked areas and records browser/assistive-technology
+variation. It is a focused static signal, not a complete WCAG conclusion.
 
 ## `img-alt-missing`
 

@@ -214,7 +214,15 @@ fn audit_html_with_enabled_rules(
   let context = build_audit_context(parsed.root, is_document)
   let findings = []
   ignore(
-    collect_findings(parsed.root, "", findings, enabled_rule_ids, None, context),
+    collect_findings(
+      parsed.root,
+      "",
+      None,
+      findings,
+      enabled_rule_ids,
+      None,
+      context,
+    ),
   )
   let diagnostics = parsed.errors.map(parse_diagnostic)
   if diagnostics.is_empty() {
@@ -240,7 +248,8 @@ fn all_rule_ids() -> Array[String] {
   [
     "img-alt-missing", "form-control-name-missing", "link-name-missing", "button-name-missing",
     "heading-level-skipped", "heading-name-missing", "document-title-missing", "html-lang-missing",
-    "iframe-name-missing", "duplicate-id",
+    "iframe-name-missing", "duplicate-id", "reference-target-invalid", "table-headers-invalid",
+    "area-alt-missing",
   ]
 }
 
@@ -266,7 +275,10 @@ fn is_available_rule_id(rule_id : String) -> Bool {
   | "document-title-missing"
   | "html-lang-missing"
   | "iframe-name-missing"
-  | "duplicate-id")
+  | "duplicate-id"
+  | "reference-target-invalid"
+  | "table-headers-invalid"
+  | "area-alt-missing")
 }
 
 ///|
@@ -283,6 +295,7 @@ fn is_rule_enabled(enabled_rule_ids : Array[String], rule_id : String) -> Bool {
 priv struct AuditContext {
   id_nodes : Map[String, Array[@dom.Node]]
   id_paths : Map[String, Array[String]]
+  id_table_paths : Map[String, Array[String?]]
   labels_by_for : Map[String, Array[@dom.Node]]
   page_has_nonempty_title : Bool
   first_page_title_path : String?
@@ -293,10 +306,19 @@ priv struct AuditContext {
 fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
   let id_nodes : Map[String, Array[@dom.Node]] = Map([])
   let id_paths : Map[String, Array[String]] = Map([])
+  let id_table_paths : Map[String, Array[String?]] = Map([])
   let labels_by_for : Map[String, Array[@dom.Node]] = Map([])
   let page_titles : Array[(@dom.Node, String)] = []
   index_context_children(
-    root, "", false, id_nodes, id_paths, labels_by_for, page_titles,
+    root,
+    "",
+    false,
+    None,
+    id_nodes,
+    id_paths,
+    id_table_paths,
+    labels_by_for,
+    page_titles,
   )
   let mut page_has_nonempty_title = false
   let mut first_page_title_path = None
@@ -314,6 +336,7 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
   {
     id_nodes,
     id_paths,
+    id_table_paths,
     labels_by_for,
     page_has_nonempty_title,
     first_page_title_path,
@@ -326,8 +349,10 @@ fn index_context_children(
   node : @dom.Node,
   parent_path : String,
   inside_head : Bool,
+  enclosing_table_path : String?,
   id_nodes : Map[String, Array[@dom.Node]],
   id_paths : Map[String, Array[String]],
+  id_table_paths : Map[String, Array[String?]],
   labels_by_for : Map[String, Array[@dom.Node]],
   page_titles : Array[(@dom.Node, String)],
 ) -> Unit {
@@ -339,8 +364,15 @@ fn index_context_children(
       let name = child.name()
       let occurrence = nth_of_type(children, position, name)
       let path = child_path(parent_path, name, occurrence)
-      index_context_element(child, path, id_nodes, id_paths, labels_by_for)
+      index_context_element(
+        child, path, enclosing_table_path, id_nodes, id_paths, id_table_paths, labels_by_for,
+      )
       let child_inside_head = inside_head || name == "head"
+      let child_table_path = if name == "table" {
+        Some(path)
+      } else {
+        enclosing_table_path
+      }
       if child_inside_head && name == "title" {
         page_titles.push((child, path))
       }
@@ -348,12 +380,14 @@ fn index_context_children(
       // scope. The template element itself can still be indexed.
       if name != "template" {
         index_context_children(
-          child, path, child_inside_head, id_nodes, id_paths, labels_by_for, page_titles,
+          child, path, child_inside_head, child_table_path, id_nodes, id_paths, id_table_paths,
+          labels_by_for, page_titles,
         )
       }
     } else {
       index_context_children(
-        child, parent_path, inside_head, id_nodes, id_paths, labels_by_for, page_titles,
+        child, parent_path, inside_head, enclosing_table_path, id_nodes, id_paths,
+        id_table_paths, labels_by_for, page_titles,
       )
     }
     position = position + 1
@@ -364,14 +398,17 @@ fn index_context_children(
 fn index_context_element(
   node : @dom.Node,
   path : String,
+  enclosing_table_path : String?,
   id_nodes : Map[String, Array[@dom.Node]],
   id_paths : Map[String, Array[String]],
+  id_table_paths : Map[String, Array[String?]],
   labels_by_for : Map[String, Array[@dom.Node]],
 ) -> Unit {
   match node.attrs().get("id") {
     Some(Some(id)) if !id.trim().is_empty() => {
       append_index_node(id_nodes, id, node)
       append_index_path(id_paths, id, path)
+      append_index_table_path(id_table_paths, id, enclosing_table_path)
     }
     _ => ()
   }
@@ -409,9 +446,22 @@ fn append_index_path(
 }
 
 ///|
+fn append_index_table_path(
+  index : Map[String, Array[String?]],
+  key : String,
+  table_path : String?,
+) -> Unit {
+  match index.get(key) {
+    Some(paths) => paths.push(table_path)
+    None => index[key] = [table_path]
+  }
+}
+
+///|
 fn collect_findings(
   node : @dom.Node,
   parent_path : String,
+  enclosing_table_path : String?,
   findings : Array[Finding],
   enabled_rule_ids : Array[String],
   previous_heading_level : Int?,
@@ -426,6 +476,11 @@ fn collect_findings(
       let name = child.name()
       let occurrence = nth_of_type(children, position, name)
       let path = child_path(parent_path, name, occurrence)
+      let child_table_path = if name == "table" {
+        Some(path)
+      } else {
+        enclosing_table_path
+      }
       if context.is_document && name == "html" {
         if is_rule_enabled(enabled_rule_ids, "html-lang-missing") &&
           !has_nonempty_attribute(child, "lang") {
@@ -454,6 +509,10 @@ fn collect_findings(
         is_later_duplicate_id(child, path, context) {
         findings.push(duplicate_id_finding(child, path))
       }
+      if is_rule_enabled(enabled_rule_ids, "reference-target-invalid") &&
+        has_invalid_reference_target(child, context) {
+        findings.push(invalid_reference_target_finding(child, path))
+      }
       if is_rule_enabled(enabled_rule_ids, "form-control-name-missing") &&
         is_form_control_to_check(child) &&
         !has_recognizable_form_control_name(child, context) {
@@ -474,6 +533,17 @@ fn collect_findings(
         !has_recognizable_iframe_name(child, context) {
         findings.push(missing_iframe_name_finding(child, path))
       }
+      if is_rule_enabled(enabled_rule_ids, "area-alt-missing") &&
+        is_clickable_area(child) &&
+        !has_nonempty_attribute(child, "alt") {
+        findings.push(missing_area_alt_finding(child, path))
+      }
+      if is_rule_enabled(enabled_rule_ids, "table-headers-invalid") &&
+        is_table_cell(child) &&
+        enclosing_table_path is Some(_) &&
+        has_invalid_table_headers(child, enclosing_table_path, context) {
+        findings.push(invalid_table_headers_finding(child, path))
+      }
       match heading_level(child) {
         Some(level) => {
           if is_rule_enabled(enabled_rule_ids, "heading-level-skipped") &&
@@ -491,12 +561,14 @@ fn collect_findings(
       }
       if name != "template" {
         last_heading_level = collect_findings(
-          child, path, findings, enabled_rule_ids, last_heading_level, context,
+          child, path, child_table_path, findings, enabled_rule_ids, last_heading_level,
+          context,
         )
       }
     } else {
       last_heading_level = collect_findings(
-        child, parent_path, findings, enabled_rule_ids, last_heading_level, context,
+        child, parent_path, enclosing_table_path, findings, enabled_rule_ids, last_heading_level,
+        context,
       )
     }
     position = position + 1
@@ -580,6 +652,59 @@ fn has_recognizable_button_name(
 ///|
 fn is_link_to_check(node : @dom.Node) -> Bool {
   node.name() == "a" && node.attrs().get("href") is Some(_)
+}
+
+///|
+fn is_clickable_area(node : @dom.Node) -> Bool {
+  node.name() == "area" && node.attrs().get("href") is Some(_)
+}
+
+///|
+fn is_table_cell(node : @dom.Node) -> Bool {
+  node.name() is ("td" | "th")
+}
+
+///|
+fn has_invalid_table_headers(
+  cell : @dom.Node,
+  enclosing_table_path : String?,
+  context : AuditContext,
+) -> Bool {
+  match cell.attrs().get("headers") {
+    Some(Some(value)) => {
+      let cell_id = match cell.attrs().get("id") {
+        Some(Some(id)) => Some(id)
+        _ => None
+      }
+      for id in idref_tokens(value) {
+        if (cell_id is Some(own_id) && id == own_id) ||
+          !is_same_table_cell_target(context, id, enclosing_table_path) {
+          return true
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
+fn is_same_table_cell_target(
+  context : AuditContext,
+  id : String,
+  source_table_path : String?,
+) -> Bool {
+  match context.id_nodes.get(id) {
+    Some([target]) =>
+      match context.id_table_paths.get(id) {
+        Some([Some(target_table_path)]) =>
+          source_table_path is Some(source_table_path) &&
+          source_table_path == target_table_path &&
+          is_table_cell(target)
+        _ => false
+      }
+    _ => false
+  }
 }
 
 ///|
@@ -699,14 +824,8 @@ fn has_name_from_labelledby(
 ) -> Bool {
   match control.attrs().get("aria-labelledby") {
     Some(Some(value)) => {
-      let normalized = value
-        .replace_all(old="\t", new=" ")
-        .replace_all(old="\n", new=" ")
-        .replace_all(old="\r", new=" ")
-        .replace_all(old="\u{000C}", new=" ")
-      for reference in normalized.split(" ") {
-        let id = reference.trim()
-        if !id.is_empty() && indexed_id_has_text(context, id) {
+      for id in idref_tokens(value) {
+        if indexed_id_has_static_text(context, id) {
           return true
         }
       }
@@ -717,9 +836,73 @@ fn has_name_from_labelledby(
 }
 
 ///|
-fn indexed_id_has_text(context : AuditContext, id : StringView) -> Bool {
-  match context.id_nodes.get(id.to_owned()) {
+fn idref_tokens(value : String) -> Array[String] {
+  let normalized = value
+    .replace_all(old="\t", new=" ")
+    .replace_all(old="\n", new=" ")
+    .replace_all(old="\r", new=" ")
+    .replace_all(old="\u{000C}", new=" ")
+  let tokens : Array[String] = []
+  for token in normalized.split(" ") {
+    let id = token.trim()
+    let owned_id = id.to_owned()
+    if !id.is_empty() && !tokens.contains(owned_id) {
+      tokens.push(owned_id)
+    }
+  }
+  tokens
+}
+
+///|
+fn indexed_id_has_static_text(context : AuditContext, id : String) -> Bool {
+  match context.id_nodes.get(id) {
     Some([target]) => has_nonempty_visible_text(target)
+    _ => false
+  }
+}
+
+///|
+fn has_unique_id_target(context : AuditContext, id : String) -> Bool {
+  context.id_nodes.get(id) is Some([_])
+}
+
+///|
+fn has_invalid_reference_target(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  (
+    node.name() == "label" &&
+    has_invalid_single_id_reference(node, "for", context)
+  ) ||
+  has_invalid_idref_list(node, "aria-labelledby", context) ||
+  has_invalid_idref_list(node, "aria-describedby", context)
+}
+
+///|
+fn has_invalid_single_id_reference(
+  node : @dom.Node,
+  attribute : String,
+  context : AuditContext,
+) -> Bool {
+  match node.attrs().get(attribute) {
+    Some(Some(id)) => {
+      let trimmed = id.trim()
+      !trimmed.is_empty() && !has_unique_id_target(context, trimmed.to_owned())
+    }
+    _ => false
+  }
+}
+
+///|
+fn has_invalid_idref_list(
+  node : @dom.Node,
+  attribute : String,
+  context : AuditContext,
+) -> Bool {
+  match node.attrs().get(attribute) {
+    Some(Some(value)) =>
+      idref_tokens(value).any(fn(id) { !has_unique_id_target(context, id) })
     _ => false
   }
 }
@@ -875,6 +1058,42 @@ fn duplicate_id_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "duplicate-id",
     message: "This id value duplicates an earlier id in the audited input scope.",
     suggestion: "Make each non-empty id unique within this document or fragment input.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn invalid_reference_target_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "reference-target-invalid",
+    message: "This element references one or more missing or ambiguous ID targets.",
+    suggestion: "Reference a unique non-empty id in the same audited input scope.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn invalid_table_headers_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "table-headers-invalid",
+    message: "This table cell has a headers reference that is missing, self-referential, ambiguous, or outside its table.",
+    suggestion: "Reference unique IDs of other cells in the same table.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_area_alt_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "area-alt-missing",
+    message: "This clickable image-map area has no non-empty alt text.",
+    suggestion: "Add non-empty alt text that identifies this area's destination or action.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

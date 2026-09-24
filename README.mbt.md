@@ -136,7 +136,9 @@ moon run --target native cmd/a11ytrace -- --help
 
 `document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
 
-All name-related checks share an ID and `label[for]` index built once from the recovered DOM. Multiple `aria-labelledby` references are supported, but missing, empty, duplicate, cyclic, or fragment-external references do not establish a name. These are static checks: CSS visibility, rendered focusability, script-created DOM, and browser accessibility-tree behavior require manual or browser-based review.
+`reference-target-invalid` reports missing or ambiguous non-empty targets used by `label[for]`, `aria-labelledby`, or `aria-describedby`; it does not call a separately named control “unnamed” merely because one of its references is invalid. `table-headers-invalid` checks that each `headers` token resolves to another unique `td` or `th` in the same nearest table. `area-alt-missing` requires non-empty `alt` on an `<area href>`; an area without `href` is outside that rule.
+
+All name-related checks share an ID and `label[for]` index built once from the recovered DOM. Multiple `aria-labelledby` references are supported, but missing, empty, duplicate, cyclic, or fragment-external references do not establish a name. A directly referenced static text node is accepted even if its markup has `hidden` or `aria-hidden`; A11yTrace does not compute rendered visibility or the browser name algorithm. These are static checks: CSS visibility, rendered focusability, script-created DOM, shadow DOM, and browser accessibility-tree behavior require manual or browser-based review.
 
 For example, both rules can be reported from one fragment:
 

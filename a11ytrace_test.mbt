@@ -116,8 +116,8 @@ test "reports placeholder-only and empty or invalid label references" {
     "<input aria-label=\"\">" +
     "<input aria-labelledby=\"missing\">" +
     "<span id=\"blank\"> </span><input aria-labelledby=\"blank\">"
-  match @a11ytrace.audit_html(html) {
-    Findings(findings) => {
+  match @a11ytrace.audit_html_with_rules(html, ["form-control-name-missing"]) {
+    Audited(Findings(findings)) => {
       assert_eq(findings.length(), 5)
       for finding in findings {
         assert_eq(finding.rule_id, "form-control-name-missing")
@@ -125,19 +125,19 @@ test "reports placeholder-only and empty or invalid label references" {
       assert_eq(findings[0].element_path, "input:nth-of-type(1)")
       assert_eq(findings[4].element_path, "input:nth-of-type(5)")
     }
-    FindingsWithParseErrors(_, _) =>
-      fail("valid HTML should have no parser diagnostics")
-    ParseErrors(_) => fail("valid HTML should be audited")
+    Audited(_) => fail("valid HTML should have no parser diagnostics")
+    ConfigurationError(_) => fail("known form rule ID must be accepted")
   }
 }
 
 ///|
 test "does not let unrelated explicit labels name another control" {
   match
-    @a11ytrace.audit_html(
+    @a11ytrace.audit_html_with_rules(
       "<label for=\"other\">Name <input id=\"name\"></label>",
+      ["form-control-name-missing"],
     ) {
-    Findings(findings) => {
+    Audited(Findings(findings)) => {
       assert_eq(findings.length(), 1)
       assert_eq(findings[0].rule_id, "form-control-name-missing")
       assert_eq(
@@ -145,22 +145,21 @@ test "does not let unrelated explicit labels name another control" {
         "label:nth-of-type(1) > input:nth-of-type(1)",
       )
     }
-    FindingsWithParseErrors(_, _) =>
-      fail("valid HTML should have no parser diagnostics")
-    ParseErrors(_) => fail("valid HTML should be audited")
+    Audited(_) => fail("valid HTML should have no parser diagnostics")
+    ConfigurationError(_) => fail("known form rule ID must be accepted")
   }
   match
-    @a11ytrace.audit_html(
+    @a11ytrace.audit_html_with_rules(
       "<label for=\"name\">Name</label><input id=\"other\">",
+      ["form-control-name-missing"],
     ) {
-    Findings(findings) => {
+    Audited(Findings(findings)) => {
       assert_eq(findings.length(), 1)
       assert_eq(findings[0].rule_id, "form-control-name-missing")
       assert_eq(findings[0].element_path, "input:nth-of-type(1)")
     }
-    FindingsWithParseErrors(_, _) =>
-      fail("valid HTML should have no parser diagnostics")
-    ParseErrors(_) => fail("valid HTML should be audited")
+    Audited(_) => fail("valid HTML should have no parser diagnostics")
+    ConfigurationError(_) => fail("known form rule ID must be accepted")
   }
 }
 
@@ -515,12 +514,14 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 10)
+  assert_eq(rule_ids.length(), 13)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
   assert_eq(rule_ids[6], "document-title-missing")
   assert_eq(rule_ids[9], "duplicate-id")
+  assert_eq(rule_ids[10], "reference-target-invalid")
+  assert_eq(rule_ids[12], "area-alt-missing")
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -839,14 +840,16 @@ test "keeps fragment references local to the supplied markup" {
       fail("valid document input should have no parser diagnostics")
     ParseErrors(_) => fail("valid document input should be audited")
   }
-  match @a11ytrace.audit_html_fragment("<input id=\"email\">") {
-    Findings(findings) => {
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<input id=\"email\">", [
+      "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
       assert_eq(findings.length(), 1)
       assert_eq(findings[0].rule_id, "form-control-name-missing")
     }
-    FindingsWithParseErrors(_, _) =>
-      fail("valid fragments should have no parser diagnostics")
-    ParseErrors(_) => fail("valid fragments should be audited")
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known form rule ID must be accepted")
   }
   match
     @a11ytrace.audit_html_fragment(
@@ -857,14 +860,17 @@ test "keeps fragment references local to the supplied markup" {
       fail("valid fragments should have no parser diagnostics")
     ParseErrors(_) => fail("valid fragments should be audited")
   }
-  match @a11ytrace.audit_html_fragment("<input aria-labelledby=\"name\">") {
-    Findings(findings) => {
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<input aria-labelledby=\"name\">",
+      ["form-control-name-missing"],
+    ) {
+    Audited(Findings(findings)) => {
       assert_eq(findings.length(), 1)
       assert_eq(findings[0].rule_id, "form-control-name-missing")
     }
-    FindingsWithParseErrors(_, _) =>
-      fail("valid fragments should have no parser diagnostics")
-    ParseErrors(_) => fail("valid fragments should be audited")
+    Audited(_) => fail("valid fragments should have no parser diagnostics")
+    ConfigurationError(_) => fail("known form rule ID must be accepted")
   }
   match
     @a11ytrace.audit_html_fragment(
@@ -1078,5 +1084,165 @@ test "keeps existing rule findings on a complete document with page metadata" {
     FindingsWithParseErrors(_, _) =>
       fail("the complete document should not have parser diagnostics")
     ParseErrors(_) => fail("the complete document should be audited")
+  }
+}
+
+///|
+test "distinguishes IDREF target existence from static name text" {
+  let fragment = "<span id=\"hidden-name\" hidden aria-hidden=\"true\">Hidden name</span>" +
+    "<input aria-labelledby=\"hidden-name\">" +
+    "<input aria-labelledby=\"missing hidden-name\">" +
+    "<input id=\"self\" aria-labelledby=\"self\">" +
+    "<span id=\"first\" aria-labelledby=\"second\"></span>" +
+    "<span id=\"second\" aria-labelledby=\"first\"></span>" +
+    "<input aria-labelledby=\"first second\">"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].element_path, "input:nth-of-type(3)")
+      assert_eq(findings[1].element_path, "input:nth-of-type(4)")
+    }
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known name rule must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "reference-target-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].element_path, "input:nth-of-type(2)")
+    }
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known reference rule must be accepted")
+  }
+}
+
+///|
+test "reports invalid label and ARIA references without claiming names are missing" {
+  let fragment = "<label for=\"missing-control\">Name</label>" +
+    "<span id=\"valid-label\">Valid label</span>" +
+    "<input aria-label=\"Email\" aria-labelledby=\"valid-label missing-label\">" +
+    "<span id=\"description\"></span>" +
+    "<div aria-describedby=\"description missing-description\"></div>" +
+    "<div aria-labelledby=\"\"></div><div aria-describedby=\" \"></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "reference-target-invalid", "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "reference-target-invalid")
+      assert_eq(findings[0].element_path, "label:nth-of-type(1)")
+      assert_eq(findings[1].rule_id, "reference-target-invalid")
+      assert_eq(findings[1].element_path, "input:nth-of-type(1)")
+      assert_eq(findings[2].element_path, "div:nth-of-type(1)")
+    }
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known rules must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<span id=\"same\">One</span><span id=\"same\">Two</span><input aria-labelledby=\"same\">",
+      ["duplicate-id", "reference-target-invalid"],
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "duplicate-id")
+      assert_eq(findings[1].rule_id, "reference-target-invalid")
+    }
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known rules must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<input aria-describedby=\"outside\">",
+      ["reference-target-invalid"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known rule must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<input id=\"control\"><label for=\"control\" aria-describedby=\"missing\">Control</label>",
+      ["reference-target-invalid"],
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].element_path, "label:nth-of-type(1)")
+    }
+    Audited(_) => fail("the fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known rule must be accepted")
+  }
+}
+
+///|
+test "checks each table headers token against other cells in the same table" {
+  let valid = "<table><tr><td id=\"blank\"></td><th id=\"column\" headers=\"blank\">Column</th>" +
+    "<td headers=\"blank column\">Value</td><td headers=\"\">No explicit headers</td></tr></table>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(valid, ["table-headers-invalid"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("the table fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known table rule must be accepted")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<td headers=\"missing\">Outside a table</td>",
+      ["table-headers-invalid"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(FindingsWithParseErrors(findings, diagnostics)) => {
+      assert_eq(findings.length(), 0)
+      assert_true(diagnostics.length() > 0)
+    }
+    Audited(ParseErrors(_)) => fail("recoverable fragment should be audited")
+    ConfigurationError(_) => fail("known table rule must be accepted")
+  }
+  let invalid = "<table><tr><td id=\"self\" headers=\"self\">Self</td>" +
+    "<td headers=\"missing\">Missing</td><td id=\"dup\"></td><th id=\"dup\"></th>" +
+    "<td headers=\"dup\">Ambiguous</td><td headers=\"outside\">" +
+    "<table><tr><td id=\"outside\">Nested</td></tr></table></td></tr></table>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(invalid, [
+      "duplicate-id", "table-headers-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 5)
+      assert_eq(findings[0].rule_id, "table-headers-invalid")
+      assert_eq(findings[1].rule_id, "table-headers-invalid")
+      assert_eq(findings[2].rule_id, "duplicate-id")
+      assert_eq(findings[3].rule_id, "table-headers-invalid")
+      assert_eq(findings[4].rule_id, "table-headers-invalid")
+    }
+    Audited(_) => fail("the table fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known table rules must be accepted")
+  }
+}
+
+///|
+test "reports clickable image map areas without non-empty alt text" {
+  let fragment = "<map name=\"planets\"><area href=\"sun.html\" alt=\"Sun\">" +
+    "<area href=\"moon.html\" alt=\"\"><area href=\"mars.html\">" +
+    "<area alt=\"No link\"></map>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, ["area-alt-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(
+        findings[0].element_path,
+        "map:nth-of-type(1) > area:nth-of-type(2)",
+      )
+      assert_eq(
+        findings[1].element_path,
+        "map:nth-of-type(1) > area:nth-of-type(3)",
+      )
+    }
+    Audited(_) => fail("the map fragment should not have parser diagnostics")
+    ConfigurationError(_) => fail("known area rule must be accepted")
   }
 }

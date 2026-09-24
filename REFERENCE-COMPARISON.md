@@ -23,8 +23,9 @@ parsing, but does not copy the source code of any auditing tool.
 | Document versus fragment input | Supported | `audit_html` recognizes a full-document marker and applies document-only rules; `audit_html_fragment` is always local to the supplied markup. |
 | Stable rule selection and JSON findings | Supported | A small fixed rule set, stable IDs, source positions when the parser supplies them, and parse diagnostics are available. |
 | HTML-Validate's broad HTML syntax, content-model, metadata, and framework support | Not supported | A11yTrace is not an HTML conformance validator. |
-| Accessible names for native controls, links, buttons, headings, and iframes | Partially supported | It checks selected static sources only; it does not implement the full browser Accessible Name algorithm. |
-| ID and label/IDREF resolution | Partially supported | IDs and `label[for]` are indexed once per audited input. Ambiguous duplicate IDs, empty values, missing targets, fragment-external targets, and cyclic ARIA references do not prove a name. |
+| Accessible names for native controls, links, buttons, headings, iframes, and linked areas | Partially supported | It checks selected static sources only; it does not implement the full browser Accessible Name algorithm. |
+| ID and label/IDREF resolution | Partially supported | IDs and `label[for]` are indexed once per audited input. `label[for]`, `aria-labelledby`, and `aria-describedby` can report a missing or ambiguous target; only uniquely resolved text-bearing `aria-labelledby` targets establish a static name. |
+| Table `headers` relationships | Partially supported | A `td` or `th` token must target another unique cell in the same nearest table. Role, visibility, and semantic header quality are outside this static check. |
 | CSS visibility, layout, focusability, and rendered accessibility tree | Not supported automatically | Static HTML cannot determine stylesheet cascades, computed visibility, focus order, shadow DOM, or browser/assistive-technology behavior. These require manual review or browser-based tooling. |
 | Script-created or runtime-mutated DOM state | Not supported automatically | The library audits only the supplied static markup. |
 
