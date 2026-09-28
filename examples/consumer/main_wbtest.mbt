@@ -22,4 +22,17 @@ test "consumes the public fragment and JSON APIs from another package" {
   }
   let coverage_json = @a11ytrace.render_wcag_audit_json(coverage)
   assert_true(coverage_json.contains("\"removed_in_wcag22\""))
+  let review_only = @a11ytrace.audit_html_fragment_detailed_with_rules(
+    "<video></video>",
+    ["media-alternative-review"],
+  )
+  match review_only {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) =>
+      assert_true(
+        @a11ytrace.render_detailed_audit_json(result).contains(
+          "\"assessment\":\"needs_review\"",
+        ),
+      )
+    _ => fail("consumer should receive a detailed review-only result")
+  }
 }

@@ -427,9 +427,23 @@ fn audit_result_json(result : AuditResult) -> Json {
 fn detailed_audit_result_json(result : DetailedAuditResult) -> Json {
   {
     "status": detailed_status_string(result.status),
+    "assessment": detailed_assessment_string(result),
     "findings": result.findings.map(finding_json),
     "parse_diagnostics": result.parse_diagnostics.map(parse_diagnostic_json),
     "review_items": result.review_items.map(review_item_json),
+  }
+}
+
+///|
+fn detailed_assessment_string(result : DetailedAuditResult) -> String {
+  if result.status is DetailedAuditStatus::ParseErrors {
+    "parse_errors"
+  } else if !result.findings.is_empty() {
+    "findings"
+  } else if !result.review_items.is_empty() {
+    "needs_review"
+  } else {
+    "no_static_findings"
   }
 }
 
@@ -2155,7 +2169,7 @@ fn collect_extended_aria_findings(
   if role is Some(role_name) {
     let name_rule = role_name_rule_id(role_name)
     if name_rule is Some(rule_id) && is_rule_enabled(enabled, rule_id) {
-      if !has_generic_static_name(node, context) {
+      if !has_role_static_name(node, role_name, context) {
         if has_potential_svg_name_source(node) {
           review_items_for_svg_name(node, path, review_items, rule_id)
         } else {
@@ -2266,7 +2280,8 @@ fn collect_extended_structure_findings(
       ),
     )
   }
-  if is_rule_enabled(enabled, "viewport-zoom-disabled") &&
+  if context.is_document &&
+    is_rule_enabled(enabled, "viewport-zoom-disabled") &&
     has_zoom_disabling_viewport(node) {
     findings.push(
       generic_finding(
@@ -2485,6 +2500,23 @@ fn has_generic_static_name(node : @dom.Node, context : AuditContext) -> Bool {
 }
 
 ///|
+fn has_role_static_name(
+  node : @dom.Node,
+  role : String,
+  context : AuditContext,
+) -> Bool {
+  // role=img derives its name from author-provided sources. Descendant text is
+  // exposed as part of the graphic only in browser-specific cases, so it must
+  // not suppress a definite static missing-name signal here.
+  if role == "img" {
+    return has_nonempty_attribute(node, "aria-label") ||
+      has_name_from_labelledby(node, context) ||
+      has_nonempty_attribute(node, "title")
+  }
+  has_generic_static_name(node, context)
+}
+
+///|
 fn has_missing_selected_required_aria_property(node : @dom.Node) -> Bool {
   match primary_role(node) {
     Some("checkbox") | Some("switch") =>
@@ -2580,11 +2612,22 @@ fn has_zoom_disabling_viewport(node : @dom.Node) -> Bool {
     (Some(Some(name)), Some(Some(content))) if name.trim().to_lower() ==
       "viewport" => {
       let normalized = content.to_lower().replace_all(old=" ", new="")
-      normalized.contains("user-scalable=no") ||
-      normalized.contains("user-scalable=0") ||
-      normalized.contains("maximum-scale=0") ||
-      normalized.contains("maximum-scale=1") ||
-      normalized.contains("maximum-scale=1.")
+      if normalized.contains("user-scalable=no") ||
+        normalized.contains("user-scalable=0") {
+        return true
+      }
+      for setting in normalized.split(",") {
+        if setting.has_prefix("maximum-scale=") {
+          let value = setting.replace_all(old="maximum-scale=", new="")
+          if value == "0" ||
+            value == "1" ||
+            value.has_prefix("0.") ||
+            value.has_prefix("1.") {
+            return true
+          }
+        }
+      }
+      false
     }
     _ => false
   }

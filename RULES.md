@@ -34,6 +34,12 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 62
+selectable IDs separately as 32 confirmed-finding checks, 6 static hints, and
+24 manual-review triggers, with their actual execution trigger and test
+evidence. Those are result categories, not a count of automatically passed
+WCAG success criteria.
+
 New narrow static rules are intentionally bounded: selected ARIA required
 property checks cover checkbox/switch `aria-checked`, combobox
 `aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover

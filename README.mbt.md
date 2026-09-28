@@ -79,6 +79,8 @@ criterion, the version difference, mappings, and the required review step.
 "criteria": […coverage records…]}`. Each criterion uses the stable
 `coverage_status` strings `partial_automatic`, `manual_review`,
 `not_assessed`, or `removed_in_wcag22`; none is a pass status.
+The current directory has 56 records: 9 partial-automatic, 33 manual-review,
+13 not-assessed, and the one WCAG 2.1 historical record removed in WCAG 2.2.
 
 ## HTML fragment audit
 
@@ -151,7 +153,7 @@ match @a11ytrace.audit_html_with_rules(html, ["img-alt-missing"]) {
 
 ## Detailed static audit and manual review
 
-`audit_html_detailed(html)` and `audit_html_fragment_detailed(fragment)` retain the same parser status and definite `findings` as the compatible audit APIs, while exposing `review_items` separately. A review item has `rule_id`, `reason`, `element_path`, `line`, and `column`; it means static markup alone cannot establish the result. `audit_html_detailed_with_rules` and `audit_html_fragment_detailed_with_rules` return `DetailedConfiguredAuditResult`, preserving the same explicit unknown-ID behavior while retaining review items. `render_detailed_audit_json(result)` adds a `review_items` array to the same stable JSON fields and status values. It does not serialize a rule-selection configuration error, because configuration errors must still be handled before an audit is run.
+`audit_html_detailed(html)` and `audit_html_fragment_detailed(fragment)` retain the same parser status and definite `findings` as the compatible audit APIs, while exposing `review_items` separately. A review item has `rule_id`, `reason`, `element_path`, `line`, and `column`; it means static markup alone cannot establish the result. `audit_html_detailed_with_rules` and `audit_html_fragment_detailed_with_rules` return `DetailedConfiguredAuditResult`, preserving the same explicit unknown-ID behavior while retaining review items. `render_detailed_audit_json(result)` retains its existing fields and adds `assessment`: `findings`, `needs_review`, `no_static_findings`, or `parse_errors`. In particular, a report containing only review items is `needs_review`, never a pass. It does not serialize a rule-selection configuration error, because configuration errors must still be handled before an audit is run.
 
 ```moonbit nocheck
 ///|
@@ -242,6 +244,9 @@ match @a11ytrace.audit_html("<img src=\"chart.svg\"><input><a href=\"/details\">
 The parser uses HTML5-style recovery. Recoverable parser diagnostics produce `FindingsWithParseErrors`: the recovered DOM is still checked and diagnostics stay visible. `ParseErrors` is reserved for a parser failure that prevents a DOM audit. Findings include a deterministic CSS-style `element_path`; their optional line and column are source start-tag locations supplied by the parser, and remain absent when the parser has no source position.
 
 See [RULES.md](RULES.md) for rule rationale and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped comparison with HTML-Validate, axe-core, and ACT references.
+The release-review [RULE-INVENTORY.md](RULE-INVENTORY.md) lists every selectable
+ID, its actual outcome type and trigger, WCAG/practice mapping, source location,
+and named test evidence.
 
 ## License and attribution
 

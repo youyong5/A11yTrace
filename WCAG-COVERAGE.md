@@ -14,6 +14,11 @@ item when static markup contains a relevant trigger, or needs the listed
 procedure; **Not assessed** has no reliable static trigger in this release.
 `4.1.1` is retained only as WCAG 2.1 history: it was removed in WCAG 2.2.
 
+Current directory totals: **56** records = **9 partial automatic**, **33
+manual review**, **13 not assessed**, and **1 removed in WCAG 2.2**. The 55
+records marked present in WCAG 2.2 are the current A/AA set; the removed record
+is never included as a current WCAG 2.2 requirement.
+
 | SC | Level | 2.1 / 2.2 | Status | A11yTrace rules or review procedure |
 | --- | --- | --- | --- | --- |
 | 1.1.1 Non-text Content | A | both | Partial automatic | `img-alt-missing`, `area-alt-missing`; review purpose and alternative quality. |

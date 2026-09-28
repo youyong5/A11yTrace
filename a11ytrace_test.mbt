@@ -927,6 +927,38 @@ test "lists rule IDs and keeps the default audit behavior" {
 test "WCAG coverage catalog is version aware and does not claim a pass" {
   let criteria = @a11ytrace.wcag_aa_criteria()
   assert_eq(criteria.length(), 56)
+  assert_eq(
+    criteria
+    .filter(fn(item) {
+      item.coverage_status is @a11ytrace.WcagCoverageStatus::PartialAutomatic
+    })
+    .length(),
+    9,
+  )
+  assert_eq(
+    criteria
+    .filter(fn(item) {
+      item.coverage_status is @a11ytrace.WcagCoverageStatus::ManualReview
+    })
+    .length(),
+    33,
+  )
+  assert_eq(
+    criteria
+    .filter(fn(item) {
+      item.coverage_status is @a11ytrace.WcagCoverageStatus::NotAssessed
+    })
+    .length(),
+    13,
+  )
+  assert_eq(
+    criteria
+    .filter(fn(item) {
+      item.coverage_status is @a11ytrace.WcagCoverageStatus::RemovedInWcag22
+    })
+    .length(),
+    1,
+  )
   match @a11ytrace.wcag_criterion("4.1.1") {
     Some(criterion) => {
       assert_true(criterion.in_wcag21)
@@ -1036,6 +1068,183 @@ test "detailed review rules locate static risk markers without claiming findings
   assert_true(
     result.review_items.any(fn(item) { item.rule_id == "authentication-review" }),
   )
+}
+
+///|
+test "ARIA role-name rules cover author names and conservative role image handling" {
+  let unnamed = "<div role=\"checkbox\"></div><div role=\"combobox\"></div>" +
+    "<div role=\"slider\"></div><div role=\"progressbar\"></div>" +
+    "<div role=\"meter\"></div><div role=\"img\">Plain text is not its name</div>" +
+    "<div role=\"dialog\"></div>"
+  let selected = [
+    "role-checkbox-name-missing", "role-combobox-name-missing", "role-slider-name-missing",
+    "role-progressbar-name-missing", "role-meter-name-missing", "role-img-name-missing",
+    "role-dialog-name-missing",
+  ]
+  match @a11ytrace.audit_html_fragment_with_rules(unnamed, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 7)
+    _ => fail("every selected unnamed ARIA role should be reported")
+  }
+  let named = "<div role=\"checkbox\" aria-label=\"Accept\"></div>" +
+    "<span id=\"combo-name\">Search</span><div role=\"combobox\" aria-labelledby=\"combo-name\"></div>" +
+    "<div role=\"slider\" title=\"Volume\"></div><div role=\"progressbar\" aria-label=\"Loading\"></div>" +
+    "<div role=\"meter\" title=\"Score\"></div><div role=\"img\" aria-label=\"Map\">plain</div>" +
+    "<div role=\"alertdialog\" title=\"Warning\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(named, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    _ => fail("supported author names should suppress selected role findings")
+  }
+  let svg = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div role=\"img\"><svg><title>Chart</title></svg></div>",
+      ["role-img-name-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known role rule should audit")
+  }
+  assert_eq(svg.findings.length(), 0)
+  assert_eq(svg.review_items.length(), 1)
+}
+
+///|
+test "selected ARIA required-state rules distinguish missing and valid values" {
+  let selected = [
+    "aria-required-property-missing", "role-heading-level-missing", "role-tab-selected-missing",
+    "role-switch-checked-missing",
+  ]
+  let missing = "<div role=\"combobox\"></div><div role=\"heading\">Topic</div>" +
+    "<div role=\"tab\">One</div><div role=\"switch\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(missing, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 5)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(findings[1].rule_id, "role-heading-level-missing")
+      assert_eq(findings[2].rule_id, "role-tab-selected-missing")
+      assert_eq(findings[3].rule_id, "aria-required-property-missing")
+      assert_eq(findings[4].rule_id, "role-switch-checked-missing")
+    }
+    _ => fail("missing selected ARIA states should report")
+  }
+  let valid = "<div role=\"combobox\" aria-expanded=\"false\"></div>" +
+    "<div role=\"heading\" aria-level=\"6\">Topic</div><div role=\"tab\" aria-selected=\"false\">One</div>" +
+    "<div role=\"switch\" aria-checked=\"mixed\">On</div>"
+  match @a11ytrace.audit_html_fragment_with_rules(valid, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    _ => fail("valid selected ARIA states should not report")
+  }
+}
+
+///|
+test "extended references and viewport check handle valid tokens and document scope" {
+  let selected = ["aria-idref-invalid", "aria-required-property-missing"]
+  let html = "<div id=\"one\"></div><div id=\"two\"></div>" +
+    "<div aria-controls=\"one two\"></div><div aria-owns=\"missing one\"></div>" +
+    "<div role=\"checkbox\" aria-checked=\"false\"></div><div role=\"slider\" aria-valuenow=\"0\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(html, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "aria-idref-invalid")
+    }
+    _ => fail("only the mixed invalid IDREF list should report")
+  }
+  let document = "<!doctype html><html><head>" +
+    "<meta name=\"viewport\" content=\"maximum-scale=10\">" +
+    "<meta name=\"viewport\" content=\"maximum-scale=1.5\">" +
+    "</head><body></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["viewport-zoom-disabled"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(
+        findings[0].element_path,
+        "html:nth-of-type(1) > head:nth-of-type(1) > meta:nth-of-type(2)",
+      )
+    }
+    _ => fail("only a maximum scale below two should report")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<meta name=\"viewport\" content=\"user-scalable=no\">",
+      ["viewport-zoom-disabled"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(FindingsWithParseErrors(findings, _)) =>
+      assert_eq(findings.length(), 0)
+    _ => fail("viewport rule must not run for fragments")
+  }
+}
+
+///|
+test "detailed JSON labels review-only output as needing review" {
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules("<video></video>", [
+      "media-alternative-review",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rule should audit")
+  }
+  assert_eq(result.findings.length(), 0)
+  assert_eq(result.review_items.length(), 1)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(result)) {
+    {
+      "assessment": String(assessment),
+      "findings": Array([]),
+      "review_items": Array([_, ..]),
+      ..
+    } => assert_eq(assessment, "needs_review")
+    _ => fail("review-only detailed JSON must not look like a pass")
+  }
+}
+
+///|
+test "remaining review markers have specific triggers and clean markup has none" {
+  let page = "<!doctype html><html lang=\"en\"><head><title>Review</title></head><body>" +
+    "<div role=\"dialog\" aria-label=\"Settings\"></div><button aria-label=\"Save\" onfocus=\"go()\">Save</button>" +
+    "<div lang=\"fr\">Bonjour</div><div role=\"status\"></div><p>Text</p></body></html>"
+  let selected = [
+    "keyboard-trap-review", "label-in-name-review", "language-of-parts-review", "on-focus-context-review",
+    "status-message-review", "bypass-blocks-review", "meaningful-sequence-review",
+    "contrast-review", "text-resize-review",
+  ]
+  let result = match @a11ytrace.audit_html_detailed_with_rules(page, selected) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rules should audit a document")
+  }
+  assert_eq(result.findings.length(), 0)
+  assert_eq(result.review_items.length(), 11)
+  assert_true(
+    result.review_items.any(fn(item) { item.rule_id == "keyboard-trap-review" }),
+  )
+  assert_true(
+    result.review_items.any(fn(item) { item.rule_id == "bypass-blocks-review" }),
+  )
+  let clean = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div>Plain content</div>", selected,
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rules should audit a fragment")
+  }
+  assert_eq(clean.review_items.length(), 0)
+}
+
+///|
+test "new ARIA checks retain findings and reviews with recoverable parser diagnostics" {
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div role=\"checkbox\"></div><video></video></span>",
+      [
+        "aria-required-property-missing", "role-checkbox-name-missing", "media-alternative-review",
+      ],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known rules should audit recovered markup")
+  }
+  assert_true(
+    result.status is @a11ytrace.DetailedAuditStatus::FindingsWithParseErrors,
+  )
+  assert_eq(result.findings.length(), 2)
+  assert_eq(result.review_items.length(), 1)
+  assert_eq(result.parse_diagnostics.length(), 1)
 }
 
 ///|
