@@ -8,6 +8,15 @@ fn main {
     None => panic()
   }
   println("manual-review selection: \{@a11ytrace.review_rule_ids().length()}")
+  match @a11ytrace.wcag_criterion("2.4.11") {
+    Some(criterion) =>
+      println("WCAG coverage: \{criterion.id} — \{criterion.review_steps}")
+    None => panic()
+  }
+  let coverage = @a11ytrace.audit_html_with_wcag_coverage(
+    "<!doctype html><html lang=\"en\"><head><title>Example</title></head><body><img src=\"chart.png\"></body></html>",
+  )
+  println("coverage records: \{coverage.criteria.length()}")
   let detailed = @a11ytrace.audit_html_fragment_detailed(
     "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
   )

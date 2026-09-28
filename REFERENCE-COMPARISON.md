@@ -34,6 +34,9 @@ parsing, but does not copy the source code of any auditing tool.
 | Selected ARIA state value tokens | Partially supported | A11yTrace validates only a documented small set of boolean, tristate, and token-valued attributes; ACT 6a7281 is broader. |
 | Timed meta refresh | Partially supported | Complete documents with a supported numeric non-zero delay are reported; loop detection and HTML-Validate's long-delay option are not implemented. |
 | Script-created or runtime-mutated DOM state | Not supported automatically | The library audits only the supplied static markup. |
+| WCAG 2.1/2.2 A/AA coverage index | Supported as a capability directory | `wcag_aa_criteria()` records per-criterion version presence, narrow automatic mappings, review steps, and the 2.2 removal of 4.1.1; it is not a conformance engine. |
+| ARIA widget roles and required properties | Partially supported | Narrow checks cover selected named widget roles, three required-property patterns and selected IDREF attributes; A11yTrace does not claim complete role/attribute validation or browser fallback processing. |
+| Media, keyboard, focus, target size and authentication | Manual-review markers | Located review items identify relevant markup but deliberately require browser/runtime verification. |
 
 The comparison is deliberately not a coverage claim for HTML-Validate,
 axe-core, WCAG, or ACT. A finding is a focused static signal; absence of a

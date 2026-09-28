@@ -52,6 +52,34 @@ match @a11ytrace.rule_metadata("aria-hidden-focus-review") {
 let page_rules = @a11ytrace.document_rule_ids()
 ```
 
+## WCAG 2.1/2.2 coverage directory
+
+The library exposes a version-aware A/AA criterion directory without turning
+an audit into a conformance claim. `wcag_aa_criteria()` returns copied
+`WcagCriterion` records with `id`, `title`, `level`, `in_wcag21`, `in_wcag22`,
+`coverage_status`, mapped `rule_ids`, concrete `review_steps`, and an official
+reference URL. `wcag_criterion(id)` looks up one record. The directory retains
+historical `4.1.1` as `RemovedInWcag22`; it must not be treated as a WCAG 2.2
+criterion.
+
+```moonbit nocheck
+let report = @a11ytrace.audit_html_with_wcag_coverage(page_html)
+// report.audit.findings are static signals.
+// report.audit.review_items need browser/CSS/runtime verification.
+// report.criteria describes coverage, never whether the page passed a criterion.
+match @a11ytrace.wcag_criterion("2.4.11") {
+  Some(criterion) => println(criterion.review_steps)
+  None => ()
+}
+```
+
+See [WCAG-COVERAGE.md](WCAG-COVERAGE.md) for every WCAG 2.1/2.2 A/AA
+criterion, the version difference, mappings, and the required review step.
+`render_wcag_audit_json(report)` produces `{"audit": {…detailed result…},
+"criteria": […coverage records…]}`. Each criterion uses the stable
+`coverage_status` strings `partial_automatic`, `manual_review`,
+`not_assessed`, or `removed_in_wcag22`; none is a pass status.
+
 ## HTML fragment audit
 
 Components and template generators can audit local markup directly with `audit_html_fragment(fragment)`. `audit_html_fragment_with_rules(fragment, enabled_rule_ids)` has the same `ConfiguredAuditResult` and unknown-rule behavior as `audit_html_with_rules`.
@@ -152,6 +180,15 @@ moon run --target native cmd/a11ytrace -- --help
 `--format json` remains compatible and writes only `render_audit_json` output to stdout; it intentionally does not contain review items. `--format detailed-json` writes only `render_detailed_audit_json` output, including `review_items`. A document with only review items has an empty `findings` array, which means neither “fully passed” nor that browser review is unnecessary. Text output displays a rule ID, element path, source location when known, message, and any parser diagnostics. Unknown rule IDs, malformed arguments, and file-read failures write an error instead of a report. The currently available public MoonBit APIs used by this small native example do not expose a portable process-exit setter, so those error paths currently exit with status 0. **Do not use this CLI's exit status alone as a CI success signal**; callers that need enforced exit codes should use the library API from their own build integration.
 
 ## Current rule and boundary
+
+The rule directory now has 62 independently selectable checks and review
+triggers. In addition to the rules below, it covers selected ARIA required
+properties and ID relationships; static names for selected ARIA widgets;
+direct list/definition-list structure; empty table headers; unsafe viewport
+zoom tokens; and located media, keyboard, focus, target-size, dragging,
+pointer, motion, form, authentication, status-message, language, contrast and
+sequence review markers. These manual-review items are deliberately separate
+from confirmed findings.
 
 `img-alt-missing` reports an `<img>` that has no `alt` attribute. An explicit `alt=""` is accepted for decorative images, as is any non-empty `alt` value. The rule does not determine whether an image is decorative, whether alternative text is good, or whether a whole document conforms to WCAG.
 

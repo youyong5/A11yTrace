@@ -261,9 +261,14 @@ test "does not treat script style or template text as a link name" {
 
 ///|
 test "detailed fragment audit separates aria hidden focus review items" {
-  let result = @a11ytrace.audit_html_fragment_detailed(
-    "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
-  )
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div aria-hidden=\"true\"><button aria-label=\"Close\"></button></div>",
+      ["aria-hidden-focus-review"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rule must audit")
+  }
   match result.status {
     @a11ytrace.DetailedAuditStatus::Findings => ()
     _ => fail("clean fragment should have findings status")
@@ -284,7 +289,13 @@ test "aria hidden ancestors cannot be undone and disabled differs from aria disa
     "<a href=\"/x\">Link</a></div><button disabled aria-label=\"Saved\"></button>" +
     "<button aria-disabled=\"true\" aria-label=\"Unavailable\"></button>" +
     "<div tabindex=\"-1\"></div></div>"
-  let result = @a11ytrace.audit_html_fragment_detailed(html)
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(html, [
+      "aria-hidden-focus-review",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rule must audit")
+  }
   assert_eq(result.findings.length(), 0)
   assert_eq(result.review_items.length(), 3)
   assert_eq(
@@ -325,9 +336,14 @@ test "detailed rule selection retains reviews and rejects unknown IDs" {
 
 ///|
 test "aria hidden review includes supported native media and summary controls" {
-  let result = @a11ytrace.audit_html_fragment_detailed(
-    "<div aria-hidden=\"true\"><summary>More</summary><video controls></video></div>",
-  )
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div aria-hidden=\"true\"><summary>More</summary><video controls></video></div>",
+      ["aria-hidden-focus-review"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rule must audit")
+  }
   assert_eq(result.review_items.length(), 2)
   assert_eq(
     result.review_items[0].element_path,
@@ -398,7 +414,13 @@ test "svg navigation names are review items and abstract roles are definite find
   let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
     "<nav><svg><title>Menu</title></svg></nav><nav aria-label=\"Primary\"></nav>" +
     "<div role=\"button landmark\"></div><div role=\"\"></div></body></html>"
-  let detailed = @a11ytrace.audit_html_detailed(document)
+  let detailed = match
+    @a11ytrace.audit_html_detailed_with_rules(document, [
+      "navigation-landmark-name-missing", "aria-abstract-role",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known rules must audit")
+  }
   assert_eq(detailed.review_items.length(), 1)
   assert_eq(
     detailed.review_items[0].rule_id,
@@ -506,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 22)
+  assert_eq(rules.length(), 62)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -539,7 +561,8 @@ test "rule directory exposes stable metadata and copied rule selections" {
   let document_ids = @a11ytrace.document_rule_ids()
   assert_true(document_ids.contains("document-title-missing"))
   assert_true(document_ids.contains("meta-refresh-delay"))
-  assert_eq(@a11ytrace.review_rule_ids(), ["aria-hidden-focus-review"])
+  assert_true(@a11ytrace.review_rule_ids().contains("aria-hidden-focus-review"))
+  assert_true(@a11ytrace.review_rule_ids().contains("target-size-review"))
 }
 
 ///|
@@ -865,7 +888,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 22)
+  assert_eq(rule_ids.length(), 62)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -898,6 +921,121 @@ test "lists rule IDs and keeps the default audit behavior" {
       fail("valid HTML should have no parser diagnostics")
     ParseErrors(_) => fail("valid HTML should be audited")
   }
+}
+
+///|
+test "WCAG coverage catalog is version aware and does not claim a pass" {
+  let criteria = @a11ytrace.wcag_aa_criteria()
+  assert_eq(criteria.length(), 56)
+  match @a11ytrace.wcag_criterion("4.1.1") {
+    Some(criterion) => {
+      assert_true(criterion.in_wcag21)
+      assert_true(!criterion.in_wcag22)
+      assert_true(
+        criterion.coverage_status
+        is @a11ytrace.WcagCoverageStatus::RemovedInWcag22,
+      )
+    }
+    None => fail("historical parsing criterion must be documented")
+  }
+  match @a11ytrace.wcag_criterion("2.4.11") {
+    Some(criterion) => {
+      assert_true(criterion.in_wcag22)
+      assert_true(criterion.level is @a11ytrace.WcagLevel::AA)
+      assert_true(
+        criterion.coverage_status is @a11ytrace.WcagCoverageStatus::ManualReview,
+      )
+    }
+    None => fail("WCAG 2.2 AA addition must be documented")
+  }
+  let result = @a11ytrace.audit_html_with_wcag_coverage("<p>Clean-looking</p>")
+  assert_eq(result.audit.findings.length(), 0)
+  assert_eq(result.criteria.length(), 56)
+  match @json.parse(@a11ytrace.render_wcag_audit_json(result)) {
+    {
+      "audit": { "findings": Array([]), "review_items": Array(_), .. },
+      "criteria": Array([{ "id": String(first_id), .. }, ..]),
+      ..
+    } => assert_eq(first_id, "1.1.1")
+    _ => fail("coverage JSON must retain detailed audit and criterion records")
+  }
+}
+
+///|
+test "checks selected ARIA roles, names, required properties, and ID references" {
+  let html = "<div role=\"checkbox\"></div><div role=\"combobox\" aria-expanded=\"false\" aria-label=\"Search\"></div>" +
+    "<div role=\"slider\" aria-label=\"Volume\"></div><div role=\"heading\" aria-level=\"3\">Topic</div>" +
+    "<div role=\"tab\" aria-selected=\"false\">One</div><div role=\"switch\" aria-checked=\"true\">Dark</div>" +
+    "<div aria-controls=\"missing\"></div><div id=\"target\"></div><div aria-controls=\"target\"></div>"
+  match
+    @a11ytrace.audit_html_with_rules(html, [
+      "aria-required-property-missing", "aria-idref-invalid", "role-checkbox-name-missing",
+      "role-combobox-name-missing", "role-slider-name-missing", "role-heading-level-missing",
+      "role-tab-selected-missing", "role-switch-checked-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(findings[1].rule_id, "role-checkbox-name-missing")
+      assert_eq(findings[2].rule_id, "aria-required-property-missing")
+      assert_eq(findings[3].rule_id, "aria-idref-invalid")
+    }
+    _ => fail("selected ARIA rules should audit valid fragment parsing")
+  }
+}
+
+///|
+test "checks structural rules without treating inert template contents as input" {
+  let html = "<a href=\"/x\"><button>Go</button></a><ul><div>Bad</div><li>Good</li></ul>" +
+    "<dl><p>Bad</p><dt>Term</dt><dd>Meaning</dd></dl><table><th></th></table>" +
+    "<template><ul><div>Ignored</div></ul></template>"
+  let structure_result = @a11ytrace.audit_html_with_rules(html, [
+    "nested-interactive", "list-structure-invalid", "definition-list-structure-invalid",
+    "table-header-name-missing",
+  ])
+  let findings = match structure_result {
+    Audited(Findings(items)) => items
+    Audited(FindingsWithParseErrors(items, _)) => items
+    _ => fail("structural checks should produce an auditable recovered DOM")
+  }
+  assert_eq(findings.length(), 4)
+  assert_eq(findings[0].rule_id, "nested-interactive")
+  assert_eq(findings[1].rule_id, "list-structure-invalid")
+  assert_eq(findings[2].rule_id, "definition-list-structure-invalid")
+  assert_eq(findings[3].rule_id, "table-header-name-missing")
+  match
+    @a11ytrace.audit_html_with_rules(
+      "<!doctype html><html><head><meta name=\"viewport\" content=\"maximum-scale=1\"></head><body></body></html>",
+      ["viewport-zoom-disabled"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    _ => fail("zoom-disabling viewport token should be a document hint")
+  }
+}
+
+///|
+test "detailed review rules locate static risk markers without claiming findings" {
+  let html = "<video autoplay></video><div role=\"button\" tabindex=\"0\" accesskey=\"x\"></div>" +
+    "<div draggable onpointerdown=\"go()\" ondevicemotion=\"move()\"></div>" +
+    "<form><input type=\"password\" onchange=\"go()\"></form>"
+  let result = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(html, [
+      "media-alternative-review", "media-autoplay-audio-review", "keyboard-operation-review",
+      "character-key-shortcut-review", "focus-order-review", "focus-visible-review",
+      "focus-obscured-review", "target-size-review", "dragging-movement-review",
+      "pointer-cancellation-review", "motion-actuation-review", "form-error-review",
+      "authentication-review", "on-input-context-review",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
+    _ => fail("known review rules should audit")
+  }
+  assert_eq(result.findings.length(), 0)
+  assert_eq(result.review_items.length(), 14)
+  assert_eq(result.review_items[0].rule_id, "media-alternative-review")
+  assert_eq(result.review_items[1].rule_id, "media-autoplay-audio-review")
+  assert_true(
+    result.review_items.any(fn(item) { item.rule_id == "authentication-review" }),
+  )
 }
 
 ///|

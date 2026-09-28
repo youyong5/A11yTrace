@@ -17,6 +17,35 @@ fresh named selections without changing the existing explicit-ID API. The
 directory is the code source of truth for valid IDs, not a second documentation
 list.
 
+## WCAG coverage and result kinds
+
+The 62 stable IDs include confirmed static findings, structural hints, and
+located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
+are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
+`WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
+`audit_html_with_wcag_coverage(html)` returns the normal detailed audit plus a
+copied directory. It never treats zero findings as a WCAG pass.
+
+Manual-review items are emitted only when a relevant static marker exists
+(for example a media element, explicit focus ordering, a custom interactive
+role, a drag marker, or a password field). They identify what to test in a
+browser rather than asserting a WCAG failure. CSS, JavaScript, media playback,
+assistive-technology exposure, shadow DOM and cross-page consistency cannot be
+proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
+2.1 historical entry and is explicitly removed from WCAG 2.2.
+
+New narrow static rules are intentionally bounded: selected ARIA required
+property checks cover checkbox/switch `aria-checked`, combobox
+`aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover
+`aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
+The role-name checks cover checkbox, combobox, slider, progressbar, meter,
+image, dialog and alertdialog roles with the same limited static naming
+sources as native-name rules. They do not claim full ARIA role validation or
+browser name computation. `nested-interactive` only flags interactive
+descendants of links or buttons; list rules only inspect direct children;
+`table-header-name-missing` checks static header content, not header scope;
+and `viewport-zoom-disabled` is a static resilience hint, not a WCAG verdict.
+
 ## Input scope and shared context
 
 `audit_html_fragment` always treats its input as a component-local fragment.
