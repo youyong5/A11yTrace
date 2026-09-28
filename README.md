@@ -4,7 +4,21 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 ## Install and use
 
-The published package is `youyong5/a11ytrace@0.1.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
+The published package is `youyong5/a11ytrace@0.2.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
+
+## 0.2.0 release
+
+This release has 62 selectable built-in IDs: 32 confirmed Finding checks, 6
+static hints, and 24 ReviewItem triggers. These are distinct result classes,
+not 62 automatic WCAG checks. Its public WCAG directory records the 55 current
+WCAG 2.2 A/AA success criteria and one historical WCAG 2.1 entry (4.1.1,
+removed in 2.2): 9 criteria have narrow partial automatic checks, 33 have
+specific manual-review procedures, and 13 are not assessed from static HTML.
+An empty findings array never demonstrates WCAG conformance.
+
+The detailed JSON renderer also reports `assessment`: `findings`,
+`needs_review`, `no_static_findings`, or `parse_errors`. In particular,
+review-only output is `needs_review`, not a pass.
 
 ```moonbit
 import {

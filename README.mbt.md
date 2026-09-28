@@ -2,6 +2,19 @@
 
 A11yTrace is a small, pure MoonBit library for statically checking HTML accessibility rules.
 
+## Version 0.2.0
+
+Version 0.2.0 provides 62 selectable built-in IDs, deliberately separated into
+32 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
+directory is not an automatic WCAG-conformance count. The public WCAG directory
+contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
+2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
+and 13 are not assessed. Zero findings never means WCAG conformance.
+
+For detailed JSON, `assessment` is `findings`, `needs_review`,
+`no_static_findings`, or `parse_errors`; a report with only ReviewItems is
+explicitly `needs_review`.
+
 ## Dependency and use
 
 It uses [`bobzhang/html_parser` 0.1.8](https://github.com/bobzhang/html_parser) to parse HTML into a DOM; A11yTrace does not parse HTML with regular expressions.
