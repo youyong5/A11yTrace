@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 70 stable IDs include confirmed static findings, structural hints, and
+The 71 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 70
-selectable IDs separately as 40 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 71
+selectable IDs separately as 41 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -43,7 +43,8 @@ WCAG success criteria.
 New narrow static rules are intentionally bounded: selected ARIA required
 property checks cover custom checkbox/switch/radio `aria-checked`, combobox
 `aria-expanded`, slider `aria-valuenow`, and scrollbar `aria-controls` plus
-`aria-valuenow`; selected ARIA IDREF checks cover
+`aria-valuenow`; `aria-range-value-invalid` separately checks explicit custom
+slider/scrollbar numeric min/max/now values; selected ARIA IDREF checks cover
 `aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
 The role-name checks cover custom button/link/radio/textbox/searchbox, checkbox, combobox, slider,
 progressbar, meter, image, dialog and alertdialog roles with the same limited static naming
@@ -365,7 +366,7 @@ textbox](https://www.w3.org/TR/wai-aria-1.2/#textbox) and
 [searchbox](https://www.w3.org/TR/wai-aria-1.2/#searchbox), not a complete
 AccName or keyboard-interaction implementation.
 
-## `aria-required-property-missing` and `aria-state-value-invalid`
+## `aria-required-property-missing`, `aria-range-value-invalid`, and `aria-state-value-invalid`
 
 `aria-required-property-missing` checks only selected effective custom roles:
 `checkbox`, `switch`, and `radio` require `aria-checked`; `combobox` requires
@@ -380,6 +381,28 @@ require `aria-valuenow` on `spinbutton`, whose role has an implicit default. A n
 `<input type="radio">` is not reported merely because it uses its HTML checked
 state instead of an ARIA attribute, including when it redundantly carries
 `role="radio"`.
+
+`aria-range-value-invalid` is separate from that presence check. It runs only
+on effective custom `slider` and `scrollbar` roles (including an ordered
+concrete fallback such as `role="future-role slider"`), never native form
+controls, `spinbutton`, or `progressbar`. It validates each explicitly
+supplied `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` as a finite
+signed decimal number, accepts negative values, fractions, and bounded
+scientific notation, and compares the numbers exactly rather than through a
+binary floating-point conversion. If min/max are absent it uses the role's
+0/100 defaults; an omitted `aria-valuenow` produces no range-value Finding so
+that `aria-required-property-missing` remains the sole missing-property
+result. `aria-valuetext` is an alternative human-readable value and does not
+make an invalid numeric ARIA value valid.
+
+Malformed, empty, non-finite, or otherwise non-numeric explicit tokens are
+definite Findings. Exponents with more than six digits are not expanded or
+compared speculatively; they yield a `ReviewItem` under the same ID with a
+browser-verification instruction. This is a deliberately bounded static
+WAI-ARIA value check, not a complete ARIA validator or a determination of
+widget interaction behavior. It follows [WAI-ARIA 1.2 range value
+requirements](https://www.w3.org/TR/wai-aria-1.2/#aria-valuenow) and
+[slider defaults](https://www.w3.org/TR/wai-aria-1.2/#slider).
 
 `aria-state-value-invalid` validates the listed static state tokens and emits
 at most one state-value Finding for an element. `aria-checked="mixed"` is

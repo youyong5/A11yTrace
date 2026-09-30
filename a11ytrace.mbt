@@ -162,6 +162,30 @@ pub(all) struct WcagAuditResult {
 }
 
 ///|
+// A finite base-ten number retained as coefficient and decimal scale. Keeping
+// this representation exact avoids a floating-point rounding decision at a
+// slider or scrollbar boundary.
+priv struct ExactDecimal {
+  negative : Bool
+  digits : Array[Char]
+  scale : Int
+}
+
+///|
+priv enum RangeDecimalParse {
+  Valid(ExactDecimal)
+  Invalid
+  TooLargeExponent
+}
+
+///|
+priv enum RangeValueCheck {
+  Valid
+  Finding(String)
+  Review(String)
+}
+
+///|
 /// Audit HTML with the rules currently implemented by A11yTrace.
 ///
 /// This is a pure operation: it performs no file I/O and can be used by a
@@ -925,6 +949,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       ConfirmedFinding,
       aria,
       "Checks only selected roles: checkbox/switch/radio checked, combobox expanded, slider valuenow, and scrollbar controls plus valuenow.",
+    ),
+    rule(
+      "aria-range-value-invalid",
+      "Custom slider or scrollbar has invalid or inconsistent numeric range values.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#aria-valuenow",
+      "Checks explicit finite decimal min/max/now values on effective custom slider and scrollbar roles, using 0 and 100 only when min/max are absent; missing valuenow remains the required-property rule.",
     ),
     rule(
       "aria-idref-invalid",
@@ -2261,6 +2294,25 @@ fn collect_extended_aria_findings(
       None => ()
     }
   }
+  if is_rule_enabled(enabled, "aria-range-value-invalid") {
+    match aria_range_value_check(node) {
+      Finding(message) =>
+        findings.push(
+          generic_finding(
+            node, path, "aria-range-value-invalid", message, "Use finite numeric aria-valuemin, aria-valuemax, and aria-valuenow values within a consistent range.",
+          ),
+        )
+      Review(reason) =>
+        review_items.push({
+          rule_id: "aria-range-value-invalid",
+          reason,
+          element_path: path,
+          line: node.origin_line(),
+          column: node.origin_col(),
+        })
+      Valid => ()
+    }
+  }
   if is_rule_enabled(enabled, "aria-idref-invalid") &&
     has_invalid_selected_aria_idref(node, context) {
     findings.push(
@@ -2883,6 +2935,315 @@ fn missing_selected_required_aria_property_suggestion(
     _ =>
       "Add the required ARIA state or property for the role, or use a native element."
   }
+}
+
+///|
+fn aria_range_value_check(node : @dom.Node) -> RangeValueCheck {
+  match primary_role(node) {
+    Some(role) if role is ("slider" | "scrollbar") &&
+      is_custom_range_value_target(node) => {
+      // Missing aria-valuenow is deliberately left to
+      // aria-required-property-missing, which owns that requirement.
+      if node.attrs().get("aria-valuenow") is None {
+        return Valid
+      }
+      let min = parse_explicit_range_value(
+        node,
+        "aria-valuemin",
+        decimal_zero(),
+      )
+      let max = parse_explicit_range_value(
+        node,
+        "aria-valuemax",
+        decimal_one_hundred(),
+      )
+      let now = parse_explicit_range_value(
+        node,
+        "aria-valuenow",
+        decimal_zero(),
+      )
+      let invalid_attributes : Array[String] = []
+      let too_large_attributes : Array[String] = []
+      collect_range_parse_status(
+        "aria-valuemin", min, invalid_attributes, too_large_attributes,
+      )
+      collect_range_parse_status(
+        "aria-valuemax", max, invalid_attributes, too_large_attributes,
+      )
+      collect_range_parse_status(
+        "aria-valuenow", now, invalid_attributes, too_large_attributes,
+      )
+      if !invalid_attributes.is_empty() {
+        return Finding(invalid_range_value_message(role, invalid_attributes))
+      }
+      if !too_large_attributes.is_empty() {
+        return Review(
+          "This " +
+          role +
+          " role uses an exponent too large for the static exact-decimal range comparison in " +
+          attribute_list(too_large_attributes) +
+          ". Verify its value range in a browser.",
+        )
+      }
+      match (min, max, now) {
+        (Valid(minimum), Valid(maximum), Valid(current)) =>
+          if compare_exact_decimals(minimum, maximum) > 0 {
+            Finding(
+              "This " +
+              role +
+              " role has aria-valuemin greater than aria-valuemax.",
+            )
+          } else if compare_exact_decimals(current, minimum) < 0 ||
+            compare_exact_decimals(current, maximum) > 0 {
+            Finding(
+              "This " +
+              role +
+              " role has aria-valuenow outside its aria-valuemin/aria-valuemax range.",
+            )
+          } else {
+            Valid
+          }
+        _ => Valid
+      }
+    }
+    _ => Valid
+  }
+}
+
+///|
+fn is_custom_range_value_target(node : @dom.Node) -> Bool {
+  match node.name() {
+    "input" | "select" | "textarea" => false
+    _ => true
+  }
+}
+
+///|
+fn decimal_zero() -> RangeDecimalParse {
+  Valid({ negative: false, digits: ['0'], scale: 0, })
+}
+
+///|
+fn decimal_one_hundred() -> RangeDecimalParse {
+  Valid({ negative: false, digits: ['1', '0', '0'], scale: 0, })
+}
+
+///|
+fn parse_explicit_range_value(
+  node : @dom.Node,
+  attribute : String,
+  default : RangeDecimalParse,
+) -> RangeDecimalParse {
+  match node.attrs().get(attribute) {
+    None => default
+    Some(Some(value)) => parse_exact_range_decimal(value)
+    Some(None) => Invalid
+  }
+}
+
+///|
+fn collect_range_parse_status(
+  attribute : String,
+  parsed : RangeDecimalParse,
+  invalid_attributes : Array[String],
+  too_large_attributes : Array[String],
+) -> Unit {
+  match parsed {
+    Invalid => invalid_attributes.push(attribute)
+    TooLargeExponent => too_large_attributes.push(attribute)
+    Valid(_) => ()
+  }
+}
+
+///|
+fn invalid_range_value_message(
+  role : String,
+  attributes : Array[String],
+) -> String {
+  "This " +
+  role +
+  " role has an invalid finite numeric value in " +
+  attribute_list(attributes) +
+  "."
+}
+
+///|
+fn attribute_list(attributes : Array[String]) -> String {
+  if attributes.length() == 1 {
+    attributes[0]
+  } else if attributes.length() == 2 {
+    attributes[0] + " and " + attributes[1]
+  } else {
+    let output = StringBuilder()
+    let mut index = 0
+    while index < attributes.length() {
+      if index > 0 {
+        if index + 1 == attributes.length() {
+          output.write_string(", and ")
+        } else {
+          output.write_string(", ")
+        }
+      }
+      output.write_string(attributes[index])
+      index = index + 1
+    }
+    output.to_string()
+  }
+}
+
+///|
+// Parses a finite signed decimal or scientific-decimal literal without using
+// binary floating point. Exponents with more than six digits are retained as
+// review items rather than being expanded or compared speculatively.
+fn parse_exact_range_decimal(value : String) -> RangeDecimalParse {
+  let chars = value.trim().to_array()
+  if chars.is_empty() {
+    return Invalid
+  }
+  let mut index = 0
+  let mut negative = false
+  if chars[index] is ('-' | '+') {
+    negative = chars[index] == '-'
+    index = index + 1
+  }
+  let digits : Array[Char] = []
+  let mut fractional_digits = 0
+  let mut has_decimal_point = false
+  while index < chars.length() && !(chars[index] is ('e' | 'E')) {
+    let character = chars[index]
+    if character == '.' {
+      if has_decimal_point {
+        return Invalid
+      }
+      has_decimal_point = true
+    } else if character >= '0' && character <= '9' {
+      digits.push(character)
+      if has_decimal_point {
+        fractional_digits = fractional_digits + 1
+      }
+    } else {
+      return Invalid
+    }
+    index = index + 1
+  }
+  if digits.is_empty() {
+    return Invalid
+  }
+  let mut exponent = 0
+  let mut exponent_negative = false
+  if index < chars.length() {
+    index = index + 1
+    if index < chars.length() && chars[index] is ('-' | '+') {
+      exponent_negative = chars[index] == '-'
+      index = index + 1
+    }
+    let mut exponent_digits = 0
+    while index < chars.length() {
+      let character = chars[index]
+      if !(character >= '0' && character <= '9') {
+        return Invalid
+      }
+      exponent_digits = exponent_digits + 1
+      if exponent_digits > 6 {
+        return TooLargeExponent
+      }
+      exponent = exponent * 10 + character.to_int() - '0'.to_int()
+      index = index + 1
+    }
+    if exponent_digits == 0 {
+      return Invalid
+    }
+  }
+  let normalized_digits : Array[Char] = []
+  let mut found_nonzero = false
+  for digit in digits {
+    if digit != '0' || found_nonzero {
+      normalized_digits.push(digit)
+      found_nonzero = true
+    }
+  }
+  if normalized_digits.is_empty() {
+    return Valid({ negative: false, digits: ['0'], scale: 0, })
+  }
+  let scale = if exponent_negative {
+    fractional_digits + exponent
+  } else {
+    fractional_digits - exponent
+  }
+  Valid({ negative, digits: normalized_digits, scale, })
+}
+
+///|
+fn compare_exact_decimals(left : ExactDecimal, right : ExactDecimal) -> Int {
+  let left_is_zero = is_exact_decimal_zero(left)
+  let right_is_zero = is_exact_decimal_zero(right)
+  if left_is_zero && right_is_zero {
+    return 0
+  }
+  if left_is_zero {
+    return if right.negative { 1 } else { -1 }
+  }
+  if right_is_zero {
+    return if left.negative { -1 } else { 1 }
+  }
+  if left.negative && !right.negative {
+    return -1
+  }
+  if !left.negative && right.negative {
+    return 1
+  }
+  let magnitude = compare_exact_decimal_magnitudes(left, right)
+  if left.negative {
+    -magnitude
+  } else {
+    magnitude
+  }
+}
+
+///|
+fn is_exact_decimal_zero(value : ExactDecimal) -> Bool {
+  value.digits.length() == 1 && value.digits[0] == '0'
+}
+
+///|
+fn compare_exact_decimal_magnitudes(
+  left : ExactDecimal,
+  right : ExactDecimal,
+) -> Int {
+  let left_integer_digits = left.digits.length() - left.scale
+  let right_integer_digits = right.digits.length() - right.scale
+  if left_integer_digits < right_integer_digits {
+    return -1
+  }
+  if left_integer_digits > right_integer_digits {
+    return 1
+  }
+  let length = if left.digits.length() > right.digits.length() {
+    left.digits.length()
+  } else {
+    right.digits.length()
+  }
+  let mut index = 0
+  while index < length {
+    let left_digit = if index < left.digits.length() {
+      left.digits[index].to_int()
+    } else {
+      '0'.to_int()
+    }
+    let right_digit = if index < right.digits.length() {
+      right.digits[index].to_int()
+    } else {
+      '0'.to_int()
+    }
+    if left_digit < right_digit {
+      return -1
+    }
+    if left_digit > right_digit {
+      return 1
+    }
+    index = index + 1
+  }
+  0
 }
 
 ///|

@@ -4,8 +4,8 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Current development checkout
 
-This checkout provides 70 selectable built-in IDs, deliberately separated into
-40 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
+This checkout provides 71 selectable built-in IDs, deliberately separated into
+41 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
 directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
@@ -196,7 +196,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 70 independently selectable checks and review
+The rule directory now has 71 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -227,7 +227,7 @@ from confirmed findings.
 
 `role-textbox-name-missing` and `role-searchbox-name-missing` check effective custom `role="textbox"` and `role="searchbox"` only for author-provided static names: a supported local `aria-labelledby` target, non-empty `aria-label`, or fallback title. They deliberately do not treat ordinary descendants, `contenteditable` text, `placeholder`, or `aria-placeholder` as names. Native `<input>` and `<textarea>` remain under `form-control-name-missing`. An `aria-labelledby` target containing SVG without another supported static source becomes a ReviewItem because this bounded parser does not compute SVG/browser naming.
 
-`meta-refresh-delay` applies only to complete documents and reports a `meta[http-equiv="refresh"]` with a supported numeric delay greater than zero. It does not check refresh loops, long-delay exceptions, malformed delay syntax, or runtime changes. `aria-required-property-missing` also checks effective custom `role="scrollbar"` for both `aria-controls` and `aria-valuenow`, reporting the missing property or the two missing properties in one Finding; an invalid supplied controls target remains an `aria-idref-invalid` issue. It does not require scrollbar min/max/orientation or spinbutton valuenow. `aria-attribute-undefined` checks only whether an `aria-*` name belongs to WAI-ARIA 1.2, including 1.2 additions and deprecated-but-defined names; it does not validate permission or values. `aria-state-value-invalid` checks only these explicitly listed static values: boolean `aria-busy`, `aria-disabled`, `aria-modal`, `aria-multiline`, `aria-multiselectable`, `aria-readonly`, and `aria-required`; true/false/undefined `aria-expanded` and `aria-hidden`; tristate `aria-checked` (except effective `role="radio"`, which accepts only true/false) and `aria-pressed`; and token values for `aria-current` and `aria-invalid`. `table-scope-invalid` only reports an explicit invalid `th[scope]` keyword, never an omitted scope or a `td[scope]`; it does not infer table associations.
+`meta-refresh-delay` applies only to complete documents and reports a `meta[http-equiv="refresh"]` with a supported numeric delay greater than zero. It does not check refresh loops, long-delay exceptions, malformed delay syntax, or runtime changes. `aria-required-property-missing` also checks effective custom `role="scrollbar"` for both `aria-controls` and `aria-valuenow`, reporting the missing property or the two missing properties in one Finding; an invalid supplied controls target remains an `aria-idref-invalid` issue. `aria-range-value-invalid` checks explicit finite numeric `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` on custom effective slider/scrollbar roles, uses 0/100 only for omitted min/max, and keeps omitted `aria-valuenow` under the required-property rule. It does not apply to spinbutton, progressbar, or native form controls. `aria-attribute-undefined` checks only whether an `aria-*` name belongs to WAI-ARIA 1.2, including 1.2 additions and deprecated-but-defined names; it does not validate permission or values. `aria-state-value-invalid` checks only these explicitly listed static values: boolean `aria-busy`, `aria-disabled`, `aria-modal`, `aria-multiline`, `aria-multiselectable`, `aria-readonly`, and `aria-required`; true/false/undefined `aria-expanded` and `aria-hidden`; tristate `aria-checked` (except effective `role="radio"`, which accepts only true/false) and `aria-pressed`; and token values for `aria-current` and `aria-invalid`. `table-scope-invalid` only reports an explicit invalid `th[scope]` keyword, never an omitted scope or a `td[scope]`; it does not infer table associations.
 
 `button-implicit-submit` is a static best-practice prompt, not an accessibility violation finding: it reports a native `<button>` inside a `<form>` only when `type` is missing or empty, because it defaults to submit. Explicit `type="submit"` and `type="button"`, buttons outside forms, invalid type values, and form-owner behavior through a `form` attribute are outside its narrow scope.
 

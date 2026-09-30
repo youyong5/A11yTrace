@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 70)
+  assert_eq(rules.length(), 71)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -553,6 +553,19 @@ test "rule directory exposes stable metadata and copied rule selections" {
       assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
     }
     None => fail("known rule metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("aria-range-value-invalid") {
+    Some(rule) => {
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_eq(
+        rule.reference_url,
+        "https://www.w3.org/TR/wai-aria-1.2/#aria-valuenow",
+      )
+    }
+    None => fail("range-value metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -928,7 +941,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 70)
+  assert_eq(rule_ids.length(), 71)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -949,6 +962,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("role-radio-name-missing"))
   assert_true(rule_ids.contains("role-textbox-name-missing"))
   assert_true(rule_ids.contains("role-searchbox-name-missing"))
+  assert_true(rule_ids.contains("aria-range-value-invalid"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2412,6 +2426,103 @@ test "scrollbar requirements use role fallback and leave spinbutton defaults alo
     Audited(_) => fail("only scrollbar and existing selected roles must report")
     ConfigurationError(_) =>
       fail("the required-property rule must be selectable")
+  }
+}
+
+///|
+test "range values accept exact decimals, scientific notation, and default bounds" {
+  let selected = ["aria-range-value-invalid"]
+  let markup = "<div role=\"slider\" aria-valuenow=\"0\"></div>" +
+    "<div role=\"scrollbar\" aria-valuemin=\"-1.5\" aria-valuemax=\".5\" aria-valuenow=\"-0.5\"></div>" +
+    "<div role=\"slider\" aria-valuemin=\"0\" aria-valuemax=\"1e2\" aria-valuenow=\"100.0\"></div>" +
+    "<div role=\"future-role slider\" aria-valuemin=\"-.1\" aria-valuemax=\".1\" aria-valuenow=\"0\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("valid exact decimal ranges must not report")
+    ConfigurationError(_) => fail("the range-value rule must be selectable")
+  }
+}
+
+///|
+test "range values report malformed values and inconsistent bounds once per element" {
+  let selected = ["aria-range-value-invalid"]
+  let markup = "<div role=\"slider\" aria-valuenow=\"101\"></div>" +
+    "<div role=\"scrollbar\" aria-valuemin=\"10\" aria-valuemax=\"2\" aria-valuenow=\"5\"></div>" +
+    "<div role=\"slider\" aria-valuemin=\"not-a-number\" aria-valuenow=\"1\"></div>" +
+    "<div role=\"slider\" aria-valuenow=\"NaN\" aria-valuetext=\"ten\"></div>" +
+    "<div role=\"slider\" aria-valuemin aria-valuemax=\"bad\" aria-valuenow=\"also-bad\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 5)
+      assert_eq(
+        findings[0].message,
+        "This slider role has aria-valuenow outside its aria-valuemin/aria-valuemax range.",
+      )
+      assert_eq(
+        findings[1].message,
+        "This scrollbar role has aria-valuemin greater than aria-valuemax.",
+      )
+      assert_eq(
+        findings[2].message,
+        "This slider role has an invalid finite numeric value in aria-valuemin.",
+      )
+      assert_eq(
+        findings[3].message,
+        "This slider role has an invalid finite numeric value in aria-valuenow.",
+      )
+      assert_eq(
+        findings[4].message,
+        "This slider role has an invalid finite numeric value in aria-valuemin, aria-valuemax, and aria-valuenow.",
+      )
+    }
+    Audited(_) => fail("invalid range values must report deterministically")
+    ConfigurationError(_) => fail("the range-value rule must be selectable")
+  }
+}
+
+///|
+test "range values keep required-property ownership and custom-role scope" {
+  let selected = ["aria-required-property-missing", "aria-range-value-invalid"]
+  let markup = "<div role=\"slider\"></div>" +
+    "<div role=\"future-role slider\" aria-valuenow=\"101\"></div>" +
+    "<div role=\"spinbutton\" aria-valuemin=\"10\" aria-valuemax=\"2\" aria-valuenow=\"5\"></div>" +
+    "<div role=\"progressbar\" aria-valuemin=\"10\" aria-valuemax=\"2\"></div>" +
+    "<input type=\"range\" role=\"slider\" aria-valuemin=\"10\" aria-valuemax=\"2\" aria-valuenow=\"5\">" +
+    "<input type=\"button\" role=\"slider\" aria-valuemin=\"10\" aria-valuemax=\"2\" aria-valuenow=\"5\">"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(findings[1].rule_id, "aria-range-value-invalid")
+    }
+    Audited(_) =>
+      fail("missing values and non-custom range roles must stay separate")
+    ConfigurationError(_) => fail("known range rules must be selectable")
+  }
+}
+
+///|
+test "range values preserve diagnostics and review unbounded exponents without guessing" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<div role=\"slider\" aria-valuenow=\"101\"></span>" +
+      "<div role=\"scrollbar\" aria-valuenow=\"1e1000000\"></div>",
+      ["aria-range-value-invalid"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("the range-value rule must audit malformed fragments")
+  }
+  assert_true(
+    detailed.status is @a11ytrace.DetailedAuditStatus::FindingsWithParseErrors,
+  )
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "aria-range-value-invalid")
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "aria-range-value-invalid")
+  assert_true(detailed.review_items[0].reason.contains("exponent too large"))
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    { "assessment": String("findings"), "review_items": Array([_]), .. } => ()
+    _ => fail("range review items must remain visible in detailed JSON")
   }
 }
 

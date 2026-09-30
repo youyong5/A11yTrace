@@ -1,8 +1,8 @@
 # Built-in rule inventory
 
-This is the release-review inventory for commit `9b76cb4` and its corrective
-follow-up. It deliberately distinguishes directory metadata from execution:
-there are **70 selectable metadata IDs**, comprising **40 confirmed-finding
+This is the current release-review inventory. It deliberately distinguishes
+directory metadata from execution:
+there are **71 selectable metadata IDs**, comprising **41 confirmed-finding
 checks**, **6 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -47,6 +47,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | role-textbox-name-missing | new | confirmed/review | effective custom `role=textbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
 | role-searchbox-name-missing | new | confirmed/review | effective custom `role=searchbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
 | aria-required-property-missing | new | confirmed | custom checkbox/switch/radio lacks checked, combobox expanded, slider valuenow, or scrollbar controls/valuenow | 4.1.2 | EA/H | scrollbar required properties distinguish missing values and invalid IDREFs |
+| aria-range-value-invalid | new | confirmed/review | custom effective slider/scrollbar has malformed explicit numeric min/max/now, reversed bounds, or current value outside the explicit/default 0–100 range | 4.1.2 | EA/H | range values accept exact decimals, scientific notation, and default bounds; report malformed values and inconsistent bounds once per element; preserve diagnostics and review unbounded exponents without guessing |
 | aria-idref-invalid | new | confirmed | selected ARIA local IDREF missing/ambiguous | 4.1.2 | EA/H | extended references and viewport check handle valid tokens and document scope |
 | role-checkbox-name-missing | new | confirmed/review | checkbox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |
 | role-combobox-name-missing | new | confirmed/review | combobox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |
@@ -91,3 +92,9 @@ The role-name rows are catalogued as confirmed-finding rules because a definite
 missing author/static name produces a `Finding`; their SVG-only branch produces
 a conservative `ReviewItem` under the same ID. This is an intentional
 per-input outcome distinction, not an additional metadata ID.
+
+`aria-range-value-invalid` is likewise catalogued as a confirmed-finding rule:
+malformed explicit numeric tokens and provably inconsistent bounds produce a
+`Finding`. An exponent with more than six digits cannot be safely expanded by
+the exact static comparator, so that one bounded branch produces a `ReviewItem`
+instead of guessing a comparison result.
