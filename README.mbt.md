@@ -15,6 +15,44 @@ For detailed JSON, `assessment` is `findings`, `needs_review`,
 `no_static_findings`, or `parse_errors`; a report with only ReviewItems is
 explicitly `needs_review`.
 
+## Install from Mooncakes
+
+From a new MoonBit project, install the release and import its public module
+name:
+
+```text
+moon new a11ytrace-demo
+cd a11ytrace-demo
+moon add youyong5/a11ytrace@0.4.0
+```
+
+Add this import to the generated `cmd/main/moon.pkg` before its `pkgtype`
+declaration:
+
+```moonbit nocheck
+///|
+import {
+  "youyong5/a11ytrace",
+}
+```
+
+Then replace `cmd/main/main.mbt` with this minimal audit and run it:
+
+```moonbit nocheck
+///|
+fn main {
+  match @a11ytrace.audit_html_fragment("<img src=\"logo.svg\">") {
+    Findings(findings) => println(findings[0].rule_id)
+    FindingsWithParseErrors(findings, _) => println(findings[0].rule_id)
+    ParseErrors(diagnostics) => println(diagnostics[0].message)
+  }
+}
+```
+
+```text
+moon run cmd/main
+```
+
 ## Dependency and use
 
 It uses [`bobzhang/html_parser` 0.1.8](https://github.com/bobzhang/html_parser) to parse HTML into a DOM; A11yTrace does not parse HTML with regular expressions.

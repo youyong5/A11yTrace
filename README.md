@@ -4,7 +4,43 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 ## Install and use
 
-The published package is `youyong5/a11ytrace@0.3.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
+The next published package is `youyong5/a11ytrace@0.4.0`. In a fresh MoonBit
+project, install it from Mooncakes and import the public package name:
+
+```text
+moon new a11ytrace-demo
+cd a11ytrace-demo
+moon add youyong5/a11ytrace@0.4.0
+```
+
+Add this import to the generated `cmd/main/moon.pkg` before its `pkgtype`
+declaration:
+
+```moonbit
+import {
+  "youyong5/a11ytrace" @a11ytrace,
+}
+```
+
+Then replace `cmd/main/main.mbt` with this minimal audit and run it:
+
+```moonbit
+
+fn main {
+  match @a11ytrace.audit_html_fragment("<img src=\"logo.svg\">") {
+    Findings(findings) => println(findings[0].rule_id)
+    FindingsWithParseErrors(findings, _) => println(findings[0].rule_id)
+    ParseErrors(diagnostics) => println(diagnostics[0].message)
+  }
+}
+```
+
+```text
+moon run cmd/main
+```
+
+To work from a checkout instead, clone it and run `moon check`; the module name
+is still `youyong5/a11ytrace`.
 
 ## Current development checkout
 
