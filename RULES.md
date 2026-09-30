@@ -68,14 +68,15 @@ For every audited DOM, A11yTrace builds one shared context before evaluating
 rules. It indexes non-empty IDs, `label[for]` associations, and local
 `aria-owns` references, skipping inert
 `template` contents. `aria-labelledby` accepts a whitespace-separated list:
-uniquely resolved targets are processed in source IDREF order. For each direct
-target, the bounded static subset accepts non-empty `aria-label`, ordinary
-text/descendant image `alt`, or fallback `title`. Empty values, missing
-targets, targets outside a supplied fragment, and duplicate-ID targets do not
-supply a name. A target's own `aria-labelledby` is deliberately not followed,
-so self references and cycles terminate safely without inventing a name. A
-duplicate non-empty ID reports every occurrence after the first in the audited
-input scope.
+uniquely resolved targets are processed in source IDREF order. The bounded
+static traversal follows further uniquely resolved `aria-labelledby` targets,
+keeps a visited-ID set and a fixed depth limit, and then reads supported direct
+sources: non-empty `aria-label`, ordinary text/descendant image `alt`, a direct
+SVG `<title>`, or fallback `title`. Empty values, missing targets, targets
+outside a supplied fragment, and duplicate-ID targets do not supply a name.
+Self references may contribute their own direct author source while cycles stop
+without inventing a name. A duplicate non-empty ID reports every occurrence
+after the first in the audited input scope.
 
 The context deliberately separates a target being uniquely present from it
 having a supported static name. This lets an existing but empty
@@ -85,10 +86,15 @@ The subset gives a usable `aria-labelledby` result precedence over `aria-label`
 and the checked native/content/title fallbacks; all affected name rules share
 that order. Directly referenced static text is accepted even when markup has
 `hidden` or `aria-hidden`, because this library does not compute CSS or the
-browser accessibility tree. It follows the relevant ordering ideas in [W3C
+browser accessibility tree. A direct SVG `<title>` is supported; SVG `<desc>`
+and SVG IDREF behavior that cannot be resolved inside the bounded traversal
+remain uncertain rather than being treated as either a name or a missing name.
+It follows the relevant ordering ideas in [W3C
 Accessible Name and Description Computation 1.2](https://www.w3.org/TR/accname-1.2/),
-but does not implement generated content, CSS visibility, shadow DOM, slots,
-embedded controls, host-language AAM details, or the full traversal algorithm.
+the [HTML-AAM](https://www.w3.org/TR/html-aam-1.0/), and the
+[SVG-AAM](https://www.w3.org/TR/svg-aam-1.0/), but does not implement generated
+content, CSS visibility, shadow DOM, slots, embedded controls, host-language
+AAM details, or the full browser traversal algorithm.
 
 Parser recovery still produces a recovered DOM and diagnostics. The context is
 built from that recovered DOM; callers should review parser diagnostics before
@@ -332,8 +338,10 @@ When a complete document has more than one native `<nav>`, each is checked for
 a supported static distinguishing name from non-empty `aria-labelledby`,
 `aria-label`, or `title`. An unnamed landmark is reported by
 `navigation-landmark-name-missing`; a later repetition of the same static name
-is reported by `navigation-landmark-name-duplicate`. SVG-only or runtime naming
-sources become a review item rather than an asserted missing name. These rules
+is reported by `navigation-landmark-name-duplicate`. A direct SVG `<title>`
+reached through a supported local IDREF can distinguish a landmark; unresolved
+SVG or runtime naming sources become a review item rather than an asserted
+missing name. These rules
 do not run on fragments and do not implement the browser Accessible Name
 algorithm. They are informed by HTML-Validate's landmark-name guidance.
 
@@ -456,9 +464,9 @@ the library, so `role="future-role radio"` is checked as a radio.
 
 Native buttons, `<a href>`, and the selected native form controls are excluded
 because their established name rules already own those elements; one element
-does not receive both a native and custom-role name Finding. When an otherwise
-unnamed custom role contains SVG, the rule emits a ReviewItem rather than a
-Finding because SVG/browser name sources are not reliably computed. This is a
+does not receive both a native and custom-role name Finding. A descendant SVG
+with a direct non-empty `<title>` is a supported static source. Other SVG or
+browser-only naming sources emit a ReviewItem rather than a Finding. This is a
 bounded static presence check informed by [Accessible Name and Description
 Computation 1.2](https://www.w3.org/TR/accname-1.2/), not a complete browser
 AccName implementation or WCAG conformance conclusion.
@@ -475,10 +483,9 @@ concrete-role fallback as the rest of the library, so
 These author-only role checks deliberately do **not** accept ordinary
 descendant text, text entered through `contenteditable`, `placeholder`, or
 `aria-placeholder` as names. Native `<input>` and `<textarea>` are excluded
-because `form-control-name-missing` already owns them. A referenced target that
-contains SVG and has no other supported static name source produces a
-ReviewItem instead of a missing-name Finding: this parser does not compute SVG
-or browser accessible-name behavior. Missing, duplicate, or fragment-external
+because `form-control-name-missing` already owns them. A referenced target can
+use a direct SVG `<title>`; unresolved SVG sources instead produce a ReviewItem
+rather than a missing-name Finding. Missing, duplicate, or fragment-external
 IDREF targets are not names and may separately be reported by the reference
 rule when enabled. This is a bounded static check informed by [WAI-ARIA 1.2
 textbox](https://www.w3.org/TR/wai-aria-1.2/#textbox) and
@@ -580,15 +587,15 @@ This rule is based on the guidance in the [W3C Images Tutorial](https://www.w3.o
 
 Reports `<input>`, `<select>`, and `<textarea>` controls that have no recognizable accessible name. It excludes `input` elements whose type is `hidden`, `submit`, `reset`, `button`, or `image` in this first iteration.
 
-The rule accepts non-empty text from a `<label for="control-id">`, a text-bearing wrapping `<label>` without `for`, non-empty `aria-label`, an `aria-labelledby` reference to at least one existing text-bearing element, or non-empty `title`. A wrapping label with `for` is only accepted when that value matches the descendant control's `id`. For multiple `aria-labelledby` IDs, each reference is examined and any valid text-bearing target supplies a name. Empty labels and ARIA values, missing or empty `aria-labelledby` targets, a bare `id`, and `placeholder` do not count. `title` is a fallback: a visible label is usually better.
+The rule accepts non-empty text from a `<label for="control-id">`, a text-bearing wrapping `<label>` without `for`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. A wrapping label with `for` is only accepted when that value matches the descendant control's `id`. Multiple `aria-labelledby` IDs retain IDREF order; supported targets can include direct SVG `<title>`. Empty labels and ARIA values, missing or empty `aria-labelledby` targets, a bare `id`, and `placeholder` do not count. `title` is a fallback: a visible label is usually better.
 
 This follows the [W3C Forms Labels Tutorial](https://www.w3.org/WAI/tutorials/forms/labels/). It is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm or a WCAG conformance determination.
 
 ## `link-name-missing`
 
-Reports an `<a>` with an `href` attribute when it has no recognizable accessible name. It accepts non-empty descendant text, a descendant image with non-empty `alt`, non-empty `aria-label`, an `aria-labelledby` reference to an existing text-bearing element, or non-empty `title`. An anchor without `href`, empty or whitespace-only text, and an image with `alt=""` do not supply a link name.
+Reports an `<a>` with an `href` attribute when it has no recognizable accessible name. It accepts non-empty descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. An anchor without `href`, empty or whitespace-only text, and an image with `alt=""` do not supply a link name.
 
-The rule ignores text in `script`, `style`, and `template` descendants. It does not judge whether a link name describes its destination clearly. When none of the accepted HTML, image, ARIA, or title sources supplies a name, it does not yet reliably evaluate SVG naming sources; an anchor containing SVG is therefore conservatively left unreported rather than being asserted unnamed. Links with ordinary text or ARIA labels continue to be recognized normally. This is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm.
+The rule ignores text in `script`, `style`, and `template` descendants. It does not judge whether a link name describes its destination clearly. A direct SVG `<title>` is supported, but SVG `<desc>`, unresolved SVG IDREFs, and browser-only SVG mappings remain ReviewItems rather than asserted missing names. This is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm.
 
 The rule is informed by the [W3C ACT Rule: Links have accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/c487ae/).
 
@@ -596,9 +603,9 @@ The rule is informed by the [W3C ACT Rule: Links have accessible name](https://w
 
 Reports native `<button>`, `input[type="button"]`, and `input[type="image"]` controls without a recognizable accessible name. It does not inspect custom `role="button"` elements.
 
-For `<button>`, the rule accepts non-empty visible text, a descendant image with non-empty `alt`, non-empty `aria-label`, an `aria-labelledby` reference to an existing text-bearing element, or non-empty `title`. For `input[type="button"]`, it accepts non-empty `value`, ARIA naming, or `title`; whitespace-only and empty values do not count. For `input[type="image"]`, it accepts non-empty `alt`, ARIA naming, or `title`. `input[type="submit"]` and `input[type="reset"]` have browser default names and are not reported.
+For `<button>`, the rule accepts non-empty visible text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. For `input[type="button"]`, it accepts non-empty `value`, ARIA naming, or `title`; whitespace-only and empty values do not count. For `input[type="image"]`, it accepts non-empty `alt`, ARIA naming, or `title`. `input[type="submit"]` and `input[type="reset"]` have browser default names and are not reported.
 
-As with the link rule, text in `script`, `style`, and `template` descendants does not name a native button. SVG naming sources are not yet reliably evaluated, so SVG-only native buttons are conservatively left unreported. This is a static name-presence check, not a complete Accessible Name algorithm or a WCAG conformance determination.
+As with the link rule, text in `script`, `style`, and `template` descendants does not name a native button. A direct SVG `<title>` is supported; unresolved SVG sources remain ReviewItems. This is a static name-presence check, not a complete Accessible Name algorithm or a WCAG conformance determination.
 
 The rule is informed by the [W3C ACT Rule: Button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/97a4e1/) and [W3C ACT Rule: Image button has accessible name](https://www.w3.org/WAI/standards-guidelines/act/rules/59796f/).
 
@@ -610,6 +617,6 @@ The finding says “建议检查标题层级” because this is a structural rev
 
 ## `heading-name-missing`
 
-Reports empty native `h1` through `h6`. It accepts non-empty ordinary descendant text, a descendant image with non-empty `alt`, non-empty `aria-label`, or an `aria-labelledby` reference to an existing text-bearing element. Script, style, and template text does not count. As with link and button checks, SVG naming sources are not yet reliably evaluated, so SVG-only headings are conservatively left unreported.
+Reports empty native `h1` through `h6`. It accepts non-empty ordinary descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, or a supported bounded `aria-labelledby` result. Script, style, and template text does not count. As with link and button checks, unresolved SVG naming sources become ReviewItems rather than definite missing-name findings.
 
 These rules are informed by the [W3C Headings Tutorial](https://www.w3.org/WAI/tutorials/page-structure/headings/). They are focused static checks, not a complete browser Accessible Name algorithm or a WCAG conformance determination.

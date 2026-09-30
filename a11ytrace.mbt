@@ -2333,19 +2333,38 @@ fn collect_findings(
         )
       }
       if is_rule_enabled(enabled_rule_ids, "form-control-name-missing") &&
-        is_form_control_to_check(child) &&
-        !has_recognizable_form_control_name(child, context) {
-        findings.push(missing_form_control_name_finding(child, path))
+        is_form_control_to_check(child) {
+        match form_control_static_name_result(child, context) {
+          NameMissing =>
+            findings.push(missing_form_control_name_finding(child, path))
+          NameUncertain =>
+            review_items_for_static_name(
+              child, path, review_items, "form-control-name-missing",
+            )
+          NameConfirmed(_) => ()
+        }
       }
       if is_rule_enabled(enabled_rule_ids, "link-name-missing") &&
-        is_link_to_check(child) &&
-        !has_recognizable_link_name(child, context) {
-        findings.push(missing_link_name_finding(child, path))
+        is_link_to_check(child) {
+        match link_static_name_result(child, context) {
+          NameMissing => findings.push(missing_link_name_finding(child, path))
+          NameUncertain =>
+            review_items_for_static_name(
+              child, path, review_items, "link-name-missing",
+            )
+          NameConfirmed(_) => ()
+        }
       }
       if is_rule_enabled(enabled_rule_ids, "button-name-missing") &&
-        is_button_to_check(child) &&
-        !has_recognizable_button_name(child, context) {
-        findings.push(missing_button_name_finding(child, path))
+        is_button_to_check(child) {
+        match button_static_name_result(child, context) {
+          NameMissing => findings.push(missing_button_name_finding(child, path))
+          NameUncertain =>
+            review_items_for_static_name(
+              child, path, review_items, "button-name-missing",
+            )
+          NameConfirmed(_) => ()
+        }
       }
       if is_rule_enabled(enabled_rule_ids, "button-implicit-submit") &&
         name == "button" &&
@@ -2354,9 +2373,15 @@ fn collect_findings(
         findings.push(implicit_submit_button_finding(child, path))
       }
       if is_rule_enabled(enabled_rule_ids, "iframe-name-missing") &&
-        name == "iframe" &&
-        !has_recognizable_iframe_name(child, context) {
-        findings.push(missing_iframe_name_finding(child, path))
+        name == "iframe" {
+        match iframe_static_name_result(child, context) {
+          NameMissing => findings.push(missing_iframe_name_finding(child, path))
+          NameUncertain =>
+            review_items_for_static_name(
+              child, path, review_items, "iframe-name-missing",
+            )
+          NameConfirmed(_) => ()
+        }
       }
       if is_rule_enabled(enabled_rule_ids, "area-alt-missing") &&
         is_clickable_area(child) &&
@@ -2386,9 +2411,16 @@ fn collect_findings(
             findings.push(skipped_heading_level_finding(child, path))
           }
           last_heading_level = Some(level)
-          if is_rule_enabled(enabled_rule_ids, "heading-name-missing") &&
-            !has_recognizable_heading_name(child, context) {
-            findings.push(missing_heading_name_finding(child, path))
+          if is_rule_enabled(enabled_rule_ids, "heading-name-missing") {
+            match heading_static_name_result(child, context) {
+              NameMissing =>
+                findings.push(missing_heading_name_finding(child, path))
+              NameUncertain =>
+                review_items_for_static_name(
+                  child, path, review_items, "heading-name-missing",
+                )
+              NameConfirmed(_) => ()
+            }
           }
         }
         None => ()
@@ -2500,32 +2532,33 @@ fn collect_extended_aria_findings(
     let custom_name_rule = custom_role_name_rule_id(role_name)
     if custom_name_rule is Some(rule_id) &&
       is_rule_enabled(enabled, rule_id) &&
-      is_custom_role_name_target(node) &&
-      !has_custom_role_static_name(node, role_name, context) {
-      if has_custom_role_uncertain_name_source(node, role_name, context) {
-        review_items_for_svg_name(node, path, review_items, rule_id)
-      } else {
-        findings.push(
-          generic_finding(
-            node, path, rule_id, "This custom ARIA role has no recognizable accessible name in static markup.",
-            "Add visible text, an image with non-empty alt text, aria-label, aria-labelledby, or title.",
-          ),
-        )
+      is_custom_role_name_target(node) {
+      match custom_role_static_name_result(node, role_name, context) {
+        NameConfirmed(_) => ()
+        NameUncertain =>
+          review_items_for_static_name(node, path, review_items, rule_id)
+        NameMissing =>
+          findings.push(
+            generic_finding(
+              node, path, rule_id, "This custom ARIA role has no recognizable accessible name in static markup.",
+              "Add visible text, an image with non-empty alt text, aria-label, aria-labelledby, or title.",
+            ),
+          )
       }
     }
     let name_rule = role_name_rule_id(role_name)
     if name_rule is Some(rule_id) && is_rule_enabled(enabled, rule_id) {
-      if !has_role_static_name(node, role_name, context) {
-        if has_potential_svg_name_source(node) {
-          review_items_for_svg_name(node, path, review_items, rule_id)
-        } else {
+      match role_static_name_result(node, role_name, context) {
+        NameConfirmed(_) => ()
+        NameUncertain =>
+          review_items_for_static_name(node, path, review_items, rule_id)
+        NameMissing =>
           findings.push(
             generic_finding(
               node, path, rule_id, "This ARIA role has no recognizable accessible name in static markup.",
               "Add visible text, aria-label, aria-labelledby, or title as appropriate.",
             ),
           )
-        }
       }
     }
     if role_name == "heading" &&
@@ -2562,17 +2595,17 @@ fn collect_extended_aria_findings(
 }
 
 ///|
-fn review_items_for_svg_name(
+fn review_items_for_static_name(
   node : @dom.Node,
   path : String,
   review_items : Array[ReviewItem],
   rule_id : String,
 ) -> Unit {
-  // A Finding is deliberately not emitted: SVG title/desc and browser naming
-  // rules can change the result.
+  // A Finding is deliberately not emitted: SVG, CSS, and browser name rules
+  // can change the result beyond this bounded DOM subset.
   review_items.push({
     rule_id,
-    reason: "This role may derive a name from SVG or browser name-computation behavior; verify it in a browser.",
+    reason: "This element may derive a name from SVG or browser name-computation behavior outside the static subset; verify it in a browser.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),
@@ -2634,8 +2667,7 @@ fn collect_extended_structure_findings(
   }
   if is_rule_enabled(enabled, "table-header-name-missing") &&
     node.name() == "th" &&
-    !has_generic_static_name(node, context) &&
-    !has_potential_svg_name_source(node) {
+    generic_static_name_result(node, context) is NameMissing {
     findings.push(
       generic_finding(
         node, path, "table-header-name-missing", "This table header cell has no recognizable static text alternative.",
@@ -3045,106 +3077,79 @@ fn is_custom_role_name_target(node : @dom.Node) -> Bool {
 }
 
 ///|
-fn has_generic_static_name(node : @dom.Node, context : AuditContext) -> Bool {
-  has_name_from_labelledby(node, context) ||
-  has_nonempty_attribute(node, "aria-label") ||
-  has_nonempty_visible_text(node) ||
-  has_nonempty_image_alt(node) ||
-  has_nonempty_attribute(node, "title")
+priv enum StaticNameResult {
+  NameConfirmed(String)
+  NameMissing
+  NameUncertain
 }
 
 ///|
-fn has_custom_role_static_name(
-  node : @dom.Node,
-  role : String,
-  context : AuditContext,
-) -> Bool {
-  if role is ("textbox" | "searchbox") {
-    return has_author_only_text_input_name(node, context)
-  }
-  has_generic_static_name(node, context)
-}
-
-///|
-fn has_custom_role_uncertain_name_source(
-  node : @dom.Node,
-  role : String,
-  context : AuditContext,
-) -> Bool {
-  if role is ("textbox" | "searchbox") {
-    return has_uncertain_labelledby_svg_source(node, context)
-  }
-  has_potential_svg_name_source(node)
-}
-
-///|
-fn has_author_only_text_input_name(
+fn generic_static_name_result(
   node : @dom.Node,
   context : AuditContext,
-) -> Bool {
-  has_supported_text_input_labelledby_name(node, context) ||
-  has_nonempty_attribute(node, "aria-label") ||
-  has_nonempty_attribute(node, "title")
-}
-
-///|
-fn has_supported_text_input_labelledby_name(
-  node : @dom.Node,
-  context : AuditContext,
-) -> Bool {
-  match node.attrs().get("aria-labelledby") {
-    Some(Some(value)) => {
-      for id in labelledby_idref_tokens(value) {
-        match context.id_nodes.get(id) {
-          Some([target]) if !has_potential_svg_name_source(target) =>
-            if static_name_from_labelledby_target(target) is Some(_) {
-              return true
-            }
-          Some([target]) if has_nonempty_attribute(target, "aria-label") ||
-            has_nonempty_attribute(target, "title") => return true
-          _ => ()
-        }
+) -> StaticNameResult {
+  match static_name_result_from_labelledby(node, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing =>
+      match nonempty_attribute_name(node, "aria-label") {
+        Some(name) => NameConfirmed(name)
+        None =>
+          match static_name_result_from_contents(node, context) {
+            NameConfirmed(name) => NameConfirmed(name)
+            NameUncertain => NameUncertain
+            NameMissing => attribute_name_or_missing(node, "title")
+          }
       }
-      false
-    }
-    _ => false
   }
 }
 
 ///|
-fn has_uncertain_labelledby_svg_source(
-  node : @dom.Node,
-  context : AuditContext,
-) -> Bool {
-  match node.attrs().get("aria-labelledby") {
-    Some(Some(value)) => {
-      for id in labelledby_idref_tokens(value) {
-        match context.id_nodes.get(id) {
-          Some([target]) if has_potential_svg_name_source(target) => return true
-          _ => ()
-        }
-      }
-      false
-    }
-    _ => false
-  }
-}
-
-///|
-fn has_role_static_name(
+fn custom_role_static_name_result(
   node : @dom.Node,
   role : String,
   context : AuditContext,
-) -> Bool {
+) -> StaticNameResult {
+  if role is ("textbox" | "searchbox") {
+    return author_only_static_name_result(node, context)
+  }
+  generic_static_name_result(node, context)
+}
+
+///|
+fn author_only_static_name_result(
+  node : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
+  match static_name_result_from_labelledby(node, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing =>
+      match nonempty_attribute_name(node, "aria-label") {
+        Some(name) => NameConfirmed(name)
+        None => attribute_name_or_missing(node, "title")
+      }
+  }
+}
+
+///|
+fn role_static_name_result(
+  node : @dom.Node,
+  role : String,
+  context : AuditContext,
+) -> StaticNameResult {
   // role=img derives its name from author-provided sources. Descendant text is
-  // exposed as part of the graphic only in browser-specific cases, so it must
-  // not suppress a definite static missing-name signal here.
+  // exposed as part of the graphic only in browser-specific cases. A directly
+  // authored SVG title is an explicit, supported exception.
   if role == "img" {
-    return has_name_from_labelledby(node, context) ||
-      has_nonempty_attribute(node, "aria-label") ||
-      has_nonempty_attribute(node, "title")
+    return match author_only_static_name_result(node, context) {
+      NameMissing if node.name() == "svg" => direct_svg_title_name_result(node)
+      NameMissing if contains_svg_descendant(node) => NameUncertain
+      NameMissing => NameMissing
+      result => result
+    }
   }
-  has_generic_static_name(node, context)
+  generic_static_name_result(node, context)
 }
 
 ///|
@@ -3867,7 +3872,15 @@ fn fieldset_has_named_first_legend(
 ) -> Bool {
   for child in node.children() {
     if child.kind() is @dom.Element {
-      return child.name() == "legend" && has_generic_static_name(child, context)
+      if child.name() != "legend" {
+        return false
+      }
+      return match generic_static_name_result(child, context) {
+        NameMissing => false
+        // A legend whose SVG/browser-derived source is outside the supported
+        // subset must not become a definite missing-legend hint.
+        _ => true
+      }
     }
   }
   false
@@ -3988,111 +4001,197 @@ fn collect_navigation_landmark_findings(
   context : AuditContext,
   seen_names : Array[String],
 ) -> Unit {
-  match static_landmark_name(node, context) {
-    Some(name) => {
+  match landmark_static_name_result(node, context) {
+    NameConfirmed(name) => {
       if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-duplicate") &&
         seen_names.contains(name) {
         findings.push(duplicate_navigation_landmark_name_finding(node, path))
       }
       seen_names.push(name)
     }
-    None =>
-      if has_potential_svg_name_source(node) {
-        if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-missing") {
-          review_items.push(navigation_landmark_name_review_item(node, path))
-        }
-      } else if is_rule_enabled(
-          enabled_rule_ids, "navigation-landmark-name-missing",
-        ) {
+    NameUncertain =>
+      if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-missing") {
+        review_items.push(navigation_landmark_name_review_item(node, path))
+      }
+    NameMissing =>
+      if is_rule_enabled(enabled_rule_ids, "navigation-landmark-name-missing") {
         findings.push(missing_navigation_landmark_name_finding(node, path))
       }
   }
 }
 
 ///|
-fn static_landmark_name(node : @dom.Node, context : AuditContext) -> String? {
-  match static_name_from_labelledby(node, context) {
-    Some(name) => Some(name)
-    None =>
-      match node.attrs().get("aria-label") {
-        Some(Some(name)) if !name.trim().is_empty() =>
-          Some(name.trim().to_owned())
-        _ =>
-          match node.attrs().get("title") {
-            Some(Some(name)) if !name.trim().is_empty() =>
-              Some(name.trim().to_owned())
-            _ => None
-          }
-      }
-  }
+fn landmark_static_name_result(
+  node : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
+  author_only_static_name_result(node, context)
 }
 
 ///|
-fn static_name_from_labelledby(
+fn static_name_result_from_labelledby(
   node : @dom.Node,
   context : AuditContext,
-) -> String? {
+) -> StaticNameResult {
+  let visited : Array[String] = []
+  match node.attrs().get("id") {
+    Some(Some(id)) if !id.trim().is_empty() => visited.push(id)
+    _ => ()
+  }
+  static_name_result_from_labelledby_with_visited(node, context, visited, 0)
+}
+
+///|
+fn static_name_result_from_labelledby_with_visited(
+  node : @dom.Node,
+  context : AuditContext,
+  visited : Array[String],
+  depth : Int,
+) -> StaticNameResult {
   match node.attrs().get("aria-labelledby") {
     Some(Some(value)) => {
       let output = StringBuilder()
+      let mut uncertain = false
       // Keep IDREF order because it determines the resulting flat name. This
-      // deliberately does not recursively follow a referenced node's own
-      // aria-labelledby: the full traversal/visited-node algorithm requires
-      // browser semantics and is outside this static subset.
+      // is a bounded subset of the AccName traversal: duplicate or missing
+      // targets never establish a name, while cycles and unmodeled SVG naming
+      // leave a distinct uncertain result instead of a false positive.
       for id in labelledby_idref_tokens(value) {
         match context.id_nodes.get(id) {
           Some([target]) =>
-            match static_name_from_labelledby_target(target) {
-              Some(text) => {
+            match
+              static_name_result_from_labelledby_target(
+                target,
+                id,
+                context,
+                visited,
+                depth + 1,
+              ) {
+              NameConfirmed(text) => {
                 if !output.to_string().is_empty() {
                   output.write_string(" ")
                 }
                 output.write_string(text)
               }
-              None => ()
+              NameUncertain => uncertain = true
+              NameMissing => ()
             }
           _ => ()
         }
       }
       let name = output.to_string().trim().to_owned()
       if name.is_empty() {
-        None
+        if uncertain {
+          NameUncertain
+        } else {
+          NameMissing
+        }
       } else {
-        Some(name)
+        NameConfirmed(name)
       }
     }
+    _ => NameMissing
+  }
+}
+
+///|
+fn static_name_result_from_labelledby_target(
+  node : @dom.Node,
+  id : String,
+  context : AuditContext,
+  visited : Array[String],
+  depth : Int,
+) -> StaticNameResult {
+  if depth > 8 {
+    return NameUncertain
+  }
+  if !visited.contains(id) {
+    let next_visited : Array[String] = []
+    for visited_id in visited {
+      next_visited.push(visited_id)
+    }
+    next_visited.push(id)
+    match
+      static_name_result_from_labelledby_with_visited(
+        node, context, next_visited, depth,
+      ) {
+      NameConfirmed(name) => return NameConfirmed(name)
+      NameUncertain => return NameUncertain
+      NameMissing => ()
+    }
+  }
+  direct_static_name_result(node, context)
+}
+
+///|
+fn direct_static_name_result(
+  node : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
+  match nonempty_attribute_name(node, "aria-label") {
+    Some(name) => NameConfirmed(name)
+    None =>
+      if node.name() == "svg" {
+        match direct_svg_title_name_result(node) {
+          NameConfirmed(name) => NameConfirmed(name)
+          NameUncertain => NameUncertain
+          NameMissing => attribute_name_or_missing(node, "title")
+        }
+      } else {
+        match static_name_result_from_contents(node, context) {
+          NameConfirmed(name) => NameConfirmed(name)
+          NameUncertain => NameUncertain
+          NameMissing => attribute_name_or_missing(node, "title")
+        }
+      }
+  }
+}
+
+///|
+fn nonempty_attribute_name(node : @dom.Node, attribute : String) -> String? {
+  match node.attrs().get(attribute) {
+    Some(Some(value)) if !value.trim().is_empty() =>
+      Some(value.trim().to_owned())
     _ => None
   }
 }
 
 ///|
-fn static_name_from_labelledby_target(node : @dom.Node) -> String? {
-  match node.attrs().get("aria-label") {
-    Some(Some(value)) if !value.trim().is_empty() =>
-      Some(value.trim().to_owned())
-    _ => {
-      let text = static_text_content(node).trim().to_owned()
-      if !text.is_empty() {
-        return Some(text)
-      }
-      match node.attrs().get("title") {
-        Some(Some(value)) if !value.trim().is_empty() =>
-          Some(value.trim().to_owned())
-        _ => None
-      }
-    }
+fn attribute_name_or_missing(
+  node : @dom.Node,
+  attribute : String,
+) -> StaticNameResult {
+  match nonempty_attribute_name(node, attribute) {
+    Some(name) => NameConfirmed(name)
+    None => NameMissing
   }
 }
 
 ///|
-fn static_text_content(node : @dom.Node) -> String {
+fn static_name_result_from_contents(
+  node : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
   let output = StringBuilder()
-  append_static_text_content(node, output)
-  output.to_string()
+  let uncertain = [false]
+  append_static_name_contents(node, output, uncertain, context)
+  let name = output.to_string().trim().to_owned()
+  if !name.is_empty() {
+    NameConfirmed(name)
+  } else if uncertain[0] {
+    NameUncertain
+  } else {
+    NameMissing
+  }
 }
 
 ///|
-fn append_static_text_content(node : @dom.Node, output : StringBuilder) -> Unit {
+fn append_static_name_contents(
+  node : @dom.Node,
+  output : StringBuilder,
+  uncertain : Array[Bool],
+  context : AuditContext,
+) -> Unit {
   if node.kind() is @dom.Text {
     output.write_string(node.data())
     return
@@ -4107,8 +4206,97 @@ fn append_static_text_content(node : @dom.Node, output : StringBuilder) -> Unit 
       _ => ()
     }
   }
+  if node.kind() is @dom.Element && node.name() == "svg" {
+    match direct_svg_static_name_result(node) {
+      NameConfirmed(name) => output.write_string(name)
+      NameUncertain => uncertain[0] = true
+      NameMissing => ()
+    }
+    return
+  }
   for child in node.children() {
-    append_static_text_content(child, output)
+    append_static_name_contents(child, output, uncertain, context)
+  }
+}
+
+///|
+fn direct_svg_static_name_result(svg : @dom.Node) -> StaticNameResult {
+  // An SVG used as descendant content can contribute an author label or a
+  // direct title. Its aria-labelledby is intentionally left to the enclosing
+  // IDREF traversal: re-entering it here would make self/cyclic references
+  // look recursively resolvable.
+  match nonempty_attribute_name(svg, "aria-label") {
+    Some(name) => NameConfirmed(name)
+    None =>
+      match direct_svg_title_name_result(svg) {
+        NameConfirmed(name) => NameConfirmed(name)
+        NameUncertain => attribute_name_or_uncertain(svg, "title")
+        NameMissing => attribute_name_or_uncertain(svg, "title")
+      }
+  }
+}
+
+///|
+fn attribute_name_or_uncertain(
+  node : @dom.Node,
+  attribute : String,
+) -> StaticNameResult {
+  match nonempty_attribute_name(node, attribute) {
+    Some(name) => NameConfirmed(name)
+    None => NameUncertain
+  }
+}
+
+///|
+fn direct_svg_title_name_result(svg : @dom.Node) -> StaticNameResult {
+  let mut saw_title = false
+  for child in svg.children() {
+    if child.kind() is @dom.Element && child.name() == "title" {
+      saw_title = true
+      let title = static_plain_text_content(child).trim().to_owned()
+      if !title.is_empty() {
+        return NameConfirmed(title)
+      }
+    }
+  }
+  // SVG desc has description semantics whose name contribution depends on the
+  // browser mapping. It is deliberately not promoted to a name here.
+  if saw_title {
+    NameMissing
+  } else {
+    NameUncertain
+  }
+}
+
+///|
+fn contains_svg_descendant(node : @dom.Node) -> Bool {
+  for child in node.children() {
+    if child.kind() is @dom.Element &&
+      (child.name() == "svg" || contains_svg_descendant(child)) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn static_plain_text_content(node : @dom.Node) -> String {
+  let output = StringBuilder()
+  append_plain_text_content(node, output)
+  output.to_string()
+}
+
+///|
+fn append_plain_text_content(node : @dom.Node, output : StringBuilder) -> Unit {
+  if node.kind() is @dom.Text {
+    output.write_string(node.data())
+    return
+  }
+  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
+    return
+  }
+  for child in node.children() {
+    append_plain_text_content(child, output)
   }
 }
 
@@ -4344,15 +4532,19 @@ fn heading_level(node : @dom.Node) -> Int? {
 }
 
 ///|
-fn has_recognizable_heading_name(
+fn heading_static_name_result(
   heading : @dom.Node,
   context : AuditContext,
-) -> Bool {
-  has_name_from_labelledby(heading, context) ||
-  has_nonempty_attribute(heading, "aria-label") ||
-  has_nonempty_visible_text(heading) ||
-  has_nonempty_image_alt(heading) ||
-  has_potential_svg_name_source(heading)
+) -> StaticNameResult {
+  match static_name_result_from_labelledby(heading, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing =>
+      match nonempty_attribute_name(heading, "aria-label") {
+        Some(name) => NameConfirmed(name)
+        None => static_name_result_from_contents(heading, context)
+      }
+  }
 }
 
 ///|
@@ -4464,37 +4656,37 @@ fn is_ascii_alphanumeric(character : Char) -> Bool {
 }
 
 ///|
-fn has_recognizable_button_name(
+fn button_static_name_result(
   button : @dom.Node,
   context : AuditContext,
-) -> Bool {
+) -> StaticNameResult {
   match button.name() {
-    "button" =>
-      has_name_from_labelledby(button, context) ||
-      has_nonempty_attribute(button, "aria-label") ||
-      has_nonempty_visible_text(button) ||
-      has_nonempty_image_alt(button) ||
-      has_nonempty_attribute(button, "title") ||
-      has_potential_svg_name_source(button)
+    "button" => generic_static_name_result(button, context)
     "input" =>
       match button.attrs().get("type") {
         Some(Some(type_)) =>
           match type_.trim().to_lower() {
             "button" =>
-              has_name_from_labelledby(button, context) ||
-              has_nonempty_attribute(button, "aria-label") ||
-              has_nonempty_attribute(button, "value") ||
-              has_nonempty_attribute(button, "title")
-            "image" =>
-              has_name_from_labelledby(button, context) ||
-              has_nonempty_attribute(button, "aria-label") ||
-              has_nonempty_attribute(button, "alt") ||
-              has_nonempty_attribute(button, "title")
-            _ => false
+              input_button_static_name_result(button, "value", context)
+            "image" => input_button_static_name_result(button, "alt", context)
+            _ => NameMissing
           }
-        _ => false
+        _ => NameMissing
       }
-    _ => false
+    _ => NameMissing
+  }
+}
+
+///|
+fn input_button_static_name_result(
+  button : @dom.Node,
+  native_attribute : String,
+  context : AuditContext,
+) -> StaticNameResult {
+  match author_only_static_name_result(button, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing => attribute_name_or_missing(button, native_attribute)
   }
 }
 
@@ -4557,23 +4749,19 @@ fn is_same_table_cell_target(
 }
 
 ///|
-fn has_recognizable_iframe_name(
+fn iframe_static_name_result(
   iframe : @dom.Node,
   context : AuditContext,
-) -> Bool {
-  has_nonempty_attribute(iframe, "aria-label") ||
-  has_name_from_labelledby(iframe, context) ||
-  has_nonempty_attribute(iframe, "title")
+) -> StaticNameResult {
+  author_only_static_name_result(iframe, context)
 }
 
 ///|
-fn has_recognizable_link_name(link : @dom.Node, context : AuditContext) -> Bool {
-  has_name_from_labelledby(link, context) ||
-  has_nonempty_attribute(link, "aria-label") ||
-  has_nonempty_visible_text(link) ||
-  has_nonempty_image_alt(link) ||
-  has_nonempty_attribute(link, "title") ||
-  has_potential_svg_name_source(link)
+fn link_static_name_result(
+  link : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
+  generic_static_name_result(link, context)
 }
 
 ///|
@@ -4598,40 +4786,6 @@ fn is_non_name_text_element(name : String) -> Bool {
 }
 
 ///|
-fn has_nonempty_image_alt(node : @dom.Node) -> Bool {
-  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
-    return false
-  }
-  if node.kind() is @dom.Element &&
-    node.name() == "img" &&
-    has_nonempty_attribute(node, "alt") {
-    return true
-  }
-  for child in node.children() {
-    if has_nonempty_image_alt(child) {
-      return true
-    }
-  }
-  false
-}
-
-///|
-fn has_potential_svg_name_source(node : @dom.Node) -> Bool {
-  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
-    return false
-  }
-  if node.kind() is @dom.Element && node.name() == "svg" {
-    return true
-  }
-  for child in node.children() {
-    if has_potential_svg_name_source(child) {
-      return true
-    }
-  }
-  false
-}
-
-///|
 fn is_form_control_to_check(node : @dom.Node) -> Bool {
   match node.name() {
     "select" | "textarea" => true
@@ -4653,15 +4807,29 @@ fn is_excluded_input_type(type_ : String) -> Bool {
 }
 
 ///|
-fn has_recognizable_form_control_name(
+fn form_control_static_name_result(
   control : @dom.Node,
   context : AuditContext,
-) -> Bool {
-  has_name_from_labelledby(control, context) ||
-  has_nonempty_attribute(control, "aria-label") ||
-  has_explicit_label(control, context) ||
-  has_wrapping_label(control) ||
-  has_nonempty_attribute(control, "title")
+) -> StaticNameResult {
+  match static_name_result_from_labelledby(control, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing =>
+      match nonempty_attribute_name(control, "aria-label") {
+        Some(name) => NameConfirmed(name)
+        None =>
+          match explicit_label_static_name_result(control, context) {
+            NameConfirmed(name) => NameConfirmed(name)
+            NameUncertain => NameUncertain
+            NameMissing =>
+              match wrapping_label_static_name_result(control, context) {
+                NameConfirmed(name) => NameConfirmed(name)
+                NameUncertain => NameUncertain
+                NameMissing => attribute_name_or_missing(control, "title")
+              }
+          }
+      }
+  }
 }
 
 ///|
@@ -4670,14 +4838,6 @@ fn has_nonempty_attribute(node : @dom.Node, name : String) -> Bool {
     Some(Some(value)) => !value.trim().is_empty()
     _ => false
   }
-}
-
-///|
-fn has_name_from_labelledby(
-  control : @dom.Node,
-  context : AuditContext,
-) -> Bool {
-  static_name_from_labelledby(control, context) is Some(_)
 }
 
 ///|
@@ -4929,23 +5089,41 @@ fn has_invalid_idref_list(
 }
 
 ///|
-fn has_explicit_label(control : @dom.Node, context : AuditContext) -> Bool {
+fn explicit_label_static_name_result(
+  control : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
   match control.attrs().get("id") {
     Some(Some(id)) if !id.trim().is_empty() =>
-      indexed_label_for_id_has_text(context, id)
-    _ => false
+      match context.id_nodes.get(id) {
+        Some([_]) =>
+          match context.labels_by_for.get(id) {
+            Some(labels) => first_static_name_result(labels, context)
+            None => NameMissing
+          }
+        _ => NameMissing
+      }
+    _ => NameMissing
   }
 }
 
 ///|
-fn indexed_label_for_id_has_text(context : AuditContext, id : String) -> Bool {
-  match context.id_nodes.get(id) {
-    Some([_]) =>
-      match context.labels_by_for.get(id) {
-        Some(labels) => labels.any(has_nonempty_visible_text)
-        None => false
-      }
-    _ => false
+fn first_static_name_result(
+  labels : Array[@dom.Node],
+  context : AuditContext,
+) -> StaticNameResult {
+  let mut uncertain = false
+  for label in labels {
+    match static_name_result_from_contents(label, context) {
+      NameConfirmed(name) => return NameConfirmed(name)
+      NameUncertain => uncertain = true
+      NameMissing => ()
+    }
+  }
+  if uncertain {
+    NameUncertain
+  } else {
+    NameMissing
   }
 }
 
@@ -4966,18 +5144,29 @@ fn is_later_duplicate_id(
 }
 
 ///|
-fn has_wrapping_label(control : @dom.Node) -> Bool {
+fn wrapping_label_static_name_result(
+  control : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
   let mut ancestor = control.parent()
+  let mut uncertain = false
   while ancestor is Some(node) {
     if node.kind() is @dom.Element &&
       node.name() == "label" &&
-      has_nonempty_visible_text(node) &&
       wrapping_label_applies_to_control(node, control) {
-      return true
+      match static_name_result_from_contents(node, context) {
+        NameConfirmed(name) => return NameConfirmed(name)
+        NameUncertain => uncertain = true
+        NameMissing => ()
+      }
     }
     ancestor = node.parent()
   }
-  false
+  if uncertain {
+    NameUncertain
+  } else {
+    NameMissing
+  }
 }
 
 ///|

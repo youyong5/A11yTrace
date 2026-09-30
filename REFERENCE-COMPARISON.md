@@ -24,8 +24,8 @@ parsing, but does not copy the source code of any auditing tool.
 | Stable rule selection and JSON findings | Supported | A small fixed rule set, stable IDs, source positions when the parser supplies them, and parse diagnostics are available. |
 | Detailed static result categories | Supported | Detailed APIs keep definite findings and parser diagnostics separate from explicit browser/CSS review items. |
 | HTML-Validate's broad HTML syntax, content-model, metadata, and framework support | Not supported | A11yTrace is not an HTML conformance validator. |
-| Accessible names for native controls, links, buttons, headings, iframes, and linked areas | Partially supported | It checks selected static sources only; it does not implement the full browser Accessible Name algorithm. |
-| ID and label/IDREF resolution | Partially supported | IDs and `label[for]` are indexed once per audited input. `label[for]`, `aria-labelledby`, and `aria-describedby` can report a missing or ambiguous target; a uniquely resolved `label[for]` target is also checked when it is a known non-labelable built-in, and each label can report multiple known labelable built-in descendants; uniquely resolved `aria-labelledby` targets are read in order using a bounded direct `aria-label`/text-image-alt/title subset. Custom-element form association and recursive AccName traversal are outside scope. |
+| Accessible names for native controls, links, buttons, headings, iframes, and linked areas | Partially supported | It checks selected static sources, including direct SVG `<title>`, only; it does not implement the full browser Accessible Name algorithm. |
+| ID and label/IDREF resolution | Partially supported | IDs and `label[for]` are indexed once per audited input. `label[for]`, `aria-labelledby`, and `aria-describedby` can report a missing or ambiguous target; a uniquely resolved `label[for]` target is also checked when it is a known non-labelable built-in, and each label can report multiple known labelable built-in descendants. Unique `aria-labelledby` targets are read in order through a bounded visited-ID traversal and supported direct `aria-label`/text-image-alt/SVG-title/title sources. Custom-element form association, CSS visibility, and full browser AccName traversal remain outside scope. |
 | Table `headers` and explicit `scope` | Partially supported | A `td` or `th` token must target another unique cell in the same nearest table; explicit `th[scope]` is limited to HTML's four keywords. Role, visibility, semantic header quality, and implicit association are outside this static check. |
 | CSS visibility, layout, focusability, and rendered accessibility tree | Not supported automatically | Static HTML cannot determine stylesheet cascades, computed visibility, focus order, shadow DOM, or browser/assistive-technology behavior. These require manual review or browser-based tooling. |
 | `aria-hidden` and focus conflicts | Partially supported | Potentially focusable descendants are emitted as review items; A11yTrace does not assert a rendered focus conflict without CSS and runtime information. |
@@ -61,6 +61,7 @@ npx --yes html-validate@11.16.0 --rule no-dup-id:2 examples/comparison/duplicate
 | `duplicate-id.html` | A11yTrace `duplicate-id` and HTML-Validate `no-dup-id` both report the second `duplicate` ID. | A11yTrace attaches its stable element path and uses the same index to make ARIA references ambiguous; it does not validate ID syntax. |
 | `aria-role-attribute-compatibility.html` | The self-authored custom `role=button`/`aria-autocomplete` and `role=emphasis` naming cases are suitable for comparison with axe-core `aria-allowed-attr` and `aria-prohibited-attr`. | axe-core is broader. A11yTrace checks only its published role/property rows, leaves `aria-checked` to its dedicated compatibility rule, and skips native form controls rather than attempting the full ARIA-in-HTML mapping. |
 | `aria-required-context-role.html` | The self-authored valid tablist/tab and invalid nested tab cases are suitable for comparison with axe-core `aria-required-parent`. | axe-core is broader. A11yTrace implements only its published WAI-ARIA 1.2 table, accepts one unique local `aria-owns` owner, and deliberately skips root/hidden/presentational/ambiguous ownership instead of reconstructing a browser accessibility tree. |
+| `static-accessible-name.html` | The direct SVG `<title>` link and button have a static name; the SVG `<desc>`-only controls are intentionally not treated as named. | The fixture is compared with axe-core `link-name` and `button-name`; A11yTrace keeps browser-only SVG mappings as review items instead of treating them as definite names. |
 
 To run that development-only comparison with a ChromeDriver compatible with the
 locally installed Chrome:
@@ -68,6 +69,7 @@ locally installed Chrome:
 ```text
 npx --yes @axe-core/cli@4.11.0 --rules aria-allowed-attr,aria-prohibited-attr examples/comparison/aria-role-attribute-compatibility.html
 npx --yes @axe-core/cli@4.11.0 --rules aria-required-parent file:///absolute/path/to/A11yTrace/examples/comparison/aria-required-context-role.html
+npx --yes @axe-core/cli@4.11.0 --rules link-name,button-name file:///absolute/path/to/A11yTrace/examples/comparison/static-accessible-name.html
 ```
 
 The role/property command was attempted on this checkout on 2026-09-30, but
@@ -79,6 +81,13 @@ reported exactly the two intended invalid tab/option cases under
 `aria-required-context-role` reports those same two elements. The test does
 not establish general equivalence, and axe-core remains a development-only
 tool rather than a build, package, or runtime dependency.
+
+The static-name command was run on this checkout on 2026-09-30. axe-core
+reported the SVG `<desc>`-only link and button under `link-name` and
+`button-name`, and did not report the corresponding direct SVG `<title>`
+fixtures. A11yTrace agrees for the direct-title cases; it emits ReviewItems,
+rather than definite findings, for the desc-only cases because it intentionally
+does not claim that `<desc>` supplies a browser accessible name.
 
 This small comparison demonstrates selected aligned semantics only. It is not a
 claim of equivalent configuration, parser behavior, rule coverage, or output

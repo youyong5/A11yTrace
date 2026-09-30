@@ -17,14 +17,14 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | ID | Origin | Result | Actual trigger | WCAG mapping / practice | Source | Test evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | img-alt-missing | original | confirmed | `img` omits `alt` | 1.1.1 | C/O | reports an image without alt; accepts an explicitly decorative image |
-| form-control-name-missing | original | confirmed | selected input/select/textarea has no supported static name | 3.3.2, 4.1.2 | C/O | reports placeholder-only and empty or invalid label references |
-| link-name-missing | original | confirmed | `a[href]` has no supported static name | 2.4.4, 4.1.2 | C/O | reports empty links and decorative-image-only links |
-| button-name-missing | original | confirmed | native button/input button/image has no static name | 4.1.2 | C/O | reports empty and decorative-image-only native buttons |
+| form-control-name-missing | original | confirmed/review | selected input/select/textarea has no supported static name | 3.3.2, 4.1.2 | C/O | reports placeholder-only and empty or invalid label references; accepts direct SVG title, leaves unresolved SVG as review |
+| link-name-missing | original | confirmed/review | `a[href]` has no supported static name | 2.4.4, 4.1.2 | C/O | reports empty links and decorative-image-only links; accepts direct SVG title, leaves unresolved SVG as review |
+| button-name-missing | original | confirmed/review | native button/input button/image has no static name | 4.1.2 | C/O | reports empty and decorative-image-only native buttons; accepts direct SVG title, leaves unresolved SVG as review |
 | heading-level-skipped | original | static hint | later native heading drops two+ levels | 2.4.6 review practice | C/O | only reports downward native heading level skips |
-| heading-name-missing | original | confirmed | native heading lacks supported name | 2.4.6 | C/O | reports empty headings and ignores template headings |
+| heading-name-missing | original | confirmed/review | native heading lacks supported name | 2.4.6 | C/O | reports empty headings, accepts direct SVG title, and ignores template headings |
 | document-title-missing | original | confirmed | complete document has no non-empty title | 2.4.2 | C/O | reports missing document title and language only for complete documents |
 | html-lang-missing | original | confirmed | complete-document `html` has no non-empty `lang` | 3.1.1 | C/O | reports missing document title and language only for complete documents; empty values do not duplicate invalid-tag findings |
-| iframe-name-missing | original | confirmed | iframe has no title/ARIA static name | 4.1.2 | C/O | recognizes supported iframe names and reports missing or unresolved names |
+| iframe-name-missing | original | confirmed/review | iframe has no title/ARIA static name | 4.1.2 | C/O | recognizes supported bounded IDREF names including direct SVG title; unresolved sources are review |
 | duplicate-id | original | confirmed | later non-empty duplicate ID in input scope | 4.1.1 historical / relationship practice | C/O | indexes duplicate IDs once and keeps ambiguous references unnamed |
 | reference-target-invalid | original | confirmed | label-for/labelledby/describedby has missing/ambiguous ID | 1.3.1, 4.1.2 | C/O | reports invalid label and ARIA references without claiming names are missing |
 | label-for-target-not-labelable | new | confirmed | `label[for]` uniquely resolves to a known non-labelable built-in element | HTML label association/content-model practice; not a WCAG verdict | C/O | label for reports only unique known built-in targets that are not labelable; keeps missing duplicate and custom targets conservative |
@@ -34,8 +34,8 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | aria-hidden-focus-review | original | manual review | potentially focusable item in `aria-hidden=true` subtree | 4.1.2 review | C/O | aria hidden ancestors cannot be undone and disabled differs from aria disabled |
 | body-aria-hidden | original | confirmed | complete-document body is `aria-hidden=true` | 4.1.2 | C/O | body aria hidden and multiple main are document-only findings |
 | multiple-main | original | static hint | complete document has more than one native main | landmark practice | C/O | body aria hidden and multiple main are document-only findings |
-| navigation-landmark-name-missing | original | static hint | repeated native nav has no static distinguishing name | landmark practice | C/O | multiple navigation landmarks need distinct static names |
-| navigation-landmark-name-duplicate | original | static hint | later repeated native nav name duplicates earlier name | landmark practice | C/O | multiple navigation landmarks need distinct static names |
+| navigation-landmark-name-missing | original | static hint/review | repeated native nav has no static distinguishing name | landmark practice | C/O | multiple navigation landmarks need distinct static names; bounded SVG uncertainty is review |
+| navigation-landmark-name-duplicate | original | static hint | later repeated native nav name duplicates earlier name | landmark practice | C/O | multiple navigation landmarks need distinct static names, including ordered IDREF names |
 | aria-abstract-role | original | confirmed | no concrete fallback is present and `role` contains an ARIA 1.2 abstract token | 4.1.2 | C/O | abstract role rule covers the complete ARIA 1.2 abstract role set; concrete role fallback suppresses abstract tokens |
 | meta-refresh-delay | original | confirmed | complete-document refresh has supported nonzero numeric delay | 2.2.1 | C/O | reports supported nonzero meta refresh delays in complete documents only |
 | aria-state-value-invalid | original | confirmed | selected documented ARIA state token is invalid | 4.1.2 | C/O | checks only documented ARIA state token types |
@@ -43,11 +43,11 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | aria-attribute-undefined | new | confirmed | an `aria-*` attribute name is absent from the WAI-ARIA 1.2 attribute set | 4.1.2 | C/H | accepts WAI-ARIA 1.2 attribute names and reports unsupported aria attributes |
 | role-value-invalid | new | confirmed | non-empty `role` token list has neither a concrete WAI-ARIA 1.2 fallback nor an abstract-role finding | 4.1.2 | C/H | uses ordered concrete role fallback without duplicate abstract or invalid role reports |
 | table-scope-invalid | new | confirmed | `th` has an explicit `scope` other than `row`, `col`, `rowgroup`, or `colgroup` | HTML table conformance practice; not a WCAG verdict | C/H | checks only explicit invalid table header scope values |
-| role-button-name-missing | new | confirmed/review | effective custom `role=button` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept the shared static name sources |
-| role-link-name-missing | new | confirmed/review | effective custom `role=link` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept the shared static name sources |
-| role-radio-name-missing | new | confirmed/review | effective custom `role=radio` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom radio roles accept names and report empty effective roles |
-| role-textbox-name-missing | new | confirmed/review | effective custom `role=textbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
-| role-searchbox-name-missing | new | confirmed/review | effective custom `role=searchbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
+| role-button-name-missing | new | confirmed/review | effective custom `role=button` lacks a supported static name; unresolved SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept direct SVG title and shared static sources |
+| role-link-name-missing | new | confirmed/review | effective custom `role=link` lacks a supported static name; unresolved SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept direct SVG title and shared static sources |
+| role-radio-name-missing | new | confirmed/review | effective custom `role=radio` lacks a supported static name; unresolved SVG source becomes review | 4.1.2 | EA/H | custom radio roles accept direct SVG title and report empty effective roles |
+| role-textbox-name-missing | new | confirmed/review | effective custom `role=textbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; unresolved SVG IDREF becomes review | 4.1.2 | EA/H | custom text input roles accept direct SVG title but distinguish author names from editable content and placeholders |
+| role-searchbox-name-missing | new | confirmed/review | effective custom `role=searchbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; unresolved SVG IDREF becomes review | 4.1.2 | EA/H | custom text input roles accept direct SVG title but distinguish author names from editable content and placeholders |
 | aria-required-property-missing | new | confirmed | custom checkbox/switch/radio lacks checked, combobox expanded, slider valuenow, or scrollbar controls/valuenow | 4.1.2 | EA/H | scrollbar required properties distinguish missing values and invalid IDREFs |
 | aria-range-value-invalid | new | confirmed/review | custom effective slider/scrollbar has malformed explicit numeric min/max/now, reversed bounds, or current value outside the explicit/default 0–100 range | 4.1.2 | EA/H | range values accept exact decimals, scientific notation, and default bounds; report malformed values and inconsistent bounds once per element; preserve diagnostics and review unbounded exponents without guessing |
 | aria-idref-invalid | new | confirmed | selected ARIA local IDREF missing/ambiguous | 4.1.2 | EA/H | extended references and viewport check handle valid tokens and document scope |
@@ -98,8 +98,8 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | element-lang-invalid | next version | confirmed | non-empty explicit `lang` in fragment or complete-document body subtree has unknown primary language subtag or obvious separator/character failure | 3.1.2 partial static ACT evidence | C/H | element language tags respect document-body and fragment scope; JSON preserves diagnostics/order |
 
 The role-name rows are catalogued as confirmed-finding rules because a definite
-missing author/static name produces a `Finding`; their SVG-only branch produces
-a conservative `ReviewItem` under the same ID. This is an intentional
+missing author/static name produces a `Finding`; an unresolved SVG/browser-name
+branch produces a conservative `ReviewItem` under the same ID. This is an intentional
 per-input outcome distinction, not an additional metadata ID.
 
 `aria-range-value-invalid` is likewise catalogued as a confirmed-finding rule:

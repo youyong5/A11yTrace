@@ -410,7 +410,7 @@ test "multiple navigation landmarks need distinct static names" {
 }
 
 ///|
-test "svg navigation names are review items and concrete role fallback suppresses abstract tokens" {
+test "SVG content does not name navigation landmarks and concrete role fallback suppresses abstract tokens" {
   let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
     "<nav><svg><title>Menu</title></svg></nav><nav aria-label=\"Primary\"></nav>" +
     "<div role=\"button landmark\"></div><div role=\"\"></div></body></html>"
@@ -421,11 +421,9 @@ test "svg navigation names are review items and concrete role fallback suppresse
     @a11ytrace.DetailedConfiguredAuditResult::Audited(value) => value
     _ => fail("known rules must audit")
   }
-  assert_eq(detailed.review_items.length(), 1)
-  assert_eq(
-    detailed.review_items[0].rule_id,
-    "navigation-landmark-name-missing",
-  )
+  assert_eq(detailed.review_items.length(), 0)
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "navigation-landmark-name-missing")
   let abstract_findings = detailed.findings.filter(fn(finding) {
     finding.rule_id == "aria-abstract-role"
   })
@@ -434,13 +432,13 @@ test "svg navigation names are review items and concrete role fallback suppresse
   match @json.parse(json) {
     {
       "status": String(status),
-      "review_items": Array([{ "rule_id": String(rule_id), .. }]),
+      "findings": Array([{ "rule_id": String(rule_id), .. }]),
       ..
     } => {
       assert_eq(status, "findings")
       assert_eq(rule_id, "navigation-landmark-name-missing")
     }
-    _ => fail("detailed JSON must expose the documented review items")
+    _ => fail("detailed JSON must expose the navigation finding")
   }
 }
 
@@ -2764,7 +2762,7 @@ test "custom textbox and searchbox roles require author-provided names" {
 }
 
 ///|
-test "custom text input roles keep native findings separate and review SVG IDREFs" {
+test "custom text input roles accept direct SVG title IDREFs without affecting native findings" {
   let fragment = "<input><textarea></textarea>" +
     "<svg id=\"search-icon\"><title>Search</title></svg>" +
     "<div role=\"searchbox\" aria-labelledby=\"search-icon\"></div>"
@@ -2778,21 +2776,18 @@ test "custom text input roles keep native findings separate and review SVG IDREF
   assert_eq(detailed.findings.length(), 2)
   assert_eq(detailed.findings[0].rule_id, "form-control-name-missing")
   assert_eq(detailed.findings[1].rule_id, "form-control-name-missing")
-  assert_eq(detailed.review_items.length(), 1)
-  assert_eq(detailed.review_items[0].rule_id, "role-searchbox-name-missing")
+  assert_eq(detailed.review_items.length(), 0)
   match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
     {
       "findings": Array(
         [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
       ),
-      "review_items": Array([{ "rule_id": String(review), .. }]),
       ..
     } => {
       assert_eq(first, "form-control-name-missing")
       assert_eq(second, "form-control-name-missing")
-      assert_eq(review, "role-searchbox-name-missing")
     }
-    _ => fail("detailed JSON must retain custom text-input name reviews")
+    _ => fail("detailed JSON must retain native findings without SVG review")
   }
 }
 
@@ -3357,5 +3352,170 @@ test "required ARIA context preserves diagnostics selection and JSON" {
       assert_eq(second, "aria-required-context-role")
     }
     _ => fail("JSON must retain required-context findings and diagnostics")
+  }
+}
+
+///|
+test "direct SVG title names supported native ARIA and landmark targets" {
+  let fragment = "<a href=\"/details\"><svg><title>Details</title></svg></a>" +
+    "<button><svg><title>Close</title></svg></button>" +
+    "<h2><svg><title>Section</title></svg></h2>" +
+    "<svg id=\"frame-label\"><title>Report frame</title></svg>" +
+    "<iframe aria-labelledby=\"frame-label\"></iframe>" +
+    "<label><svg><title>Search</title></svg><input></label>" +
+    "<div role=\"button\"><svg><title>Save</title></svg></div>" +
+    "<svg role=\"img\"><title>Logo</title></svg>"
+  let selected = [
+    "link-name-missing", "button-name-missing", "heading-name-missing", "iframe-name-missing",
+    "form-control-name-missing", "role-button-name-missing", "role-img-name-missing",
+  ]
+  match @a11ytrace.audit_html_fragment_with_rules(fragment, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("direct SVG title must supply each documented static name")
+    ConfigurationError(_) => fail("affected name rules must be selectable")
+  }
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<svg id=\"primary-nav\"><title>Primary navigation</title></svg>" +
+    "<nav aria-labelledby=\"primary-nav\"></nav><nav aria-label=\"Footer\"></nav>" +
+    "</body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, [
+      "navigation-landmark-name-missing", "navigation-landmark-name-duplicate",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("a uniquely referenced SVG title must name navigation")
+    ConfigurationError(_) => fail("landmark rules must be selectable")
+  }
+}
+
+///|
+test "SVG desc alone remains an uncertain static name source" {
+  let fragment = "<a href=\"/details\"><svg><desc>Details</desc></svg></a>" +
+    "<button><svg><desc>Close</desc></svg></button>" +
+    "<h2><svg><desc>Section</desc></svg></h2>" +
+    "<svg id=\"input-label\"><desc>Search</desc></svg>" +
+    "<input aria-labelledby=\"input-label\">" +
+    "<div role=\"button\"><svg><desc>Save</desc></svg></div>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "link-name-missing", "button-name-missing", "heading-name-missing", "form-control-name-missing",
+      "role-button-name-missing",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("affected name rules must audit desc-only markup")
+  }
+  assert_eq(detailed.findings.length(), 0)
+  assert_eq(detailed.review_items.length(), 5)
+  assert_eq(detailed.review_items[0].rule_id, "link-name-missing")
+  assert_eq(detailed.review_items[1].rule_id, "button-name-missing")
+  assert_eq(detailed.review_items[2].rule_id, "heading-name-missing")
+  assert_eq(detailed.review_items[3].rule_id, "form-control-name-missing")
+  assert_eq(detailed.review_items[4].rule_id, "role-button-name-missing")
+}
+
+///|
+test "empty SVG title is not treated as a nonempty static name" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<a href=\"/empty-title\"><svg><title> </title></svg></a>",
+      ["link-name-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("empty SVG title markup must remain auditable")
+  }
+  assert_eq(detailed.findings.length(), 0)
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "link-name-missing")
+}
+
+///|
+test "bounded labelledby traversal preserves order self labels and safe fallback" {
+  let fragment = "<span id=\"file\">Documentation.pdf</span>" +
+    "<div id=\"delete\" role=\"button\" aria-label=\"Delete\" aria-labelledby=\"delete file\"></div>" +
+    "<span id=\"hidden-label\" aria-hidden=\"true\">Hidden label</span>" +
+    "<input aria-labelledby=\"hidden-label\">" +
+    "<span id=\"chain-last\">Chain label</span>" +
+    "<span id=\"chain-first\" aria-labelledby=\"chain-last\"></span>" +
+    "<div role=\"button\" aria-labelledby=\"chain-first\"></div>" +
+    "<span id=\"cycle-a\" aria-labelledby=\"cycle-b\"></span>" +
+    "<span id=\"cycle-b\" aria-labelledby=\"cycle-a\"></span>" +
+    "<div role=\"button\" aria-labelledby=\"cycle-a\"></div>" +
+    "<div role=\"button\" aria-label=\"Fallback\" aria-labelledby=\"missing\"></div>" +
+    "<template><span id=\"outside\">Ignored</span></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "role-button-name-missing", "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "role-button-name-missing")
+      assert_eq(findings[0].element_path, "div:nth-of-type(3)")
+    }
+    Audited(_) => fail("only the all-empty IDREF cycle must remain unnamed")
+    ConfigurationError(_) => fail("affected rules must be selectable")
+  }
+}
+
+///|
+test "labelledby order distinguishes navigation landmark names" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<span id=\"first\">Primary</span><span id=\"last\">Navigation</span>" +
+    "<nav aria-labelledby=\"first last\"></nav>" +
+    "<nav aria-labelledby=\"last first\"></nav>" +
+    "</body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, [
+      "navigation-landmark-name-missing", "navigation-landmark-name-duplicate",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("IDREF token order must produce distinct landmark names")
+    ConfigurationError(_) => fail("landmark rules must be selectable")
+  }
+}
+
+///|
+test "nested SVG IDREF cycles stay uncertain instead of recursing" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<a href=\"/details\"><svg id=\"icon\" aria-labelledby=\"icon\"></svg></a>",
+      ["link-name-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("SVG self references must remain safely auditable")
+  }
+  assert_eq(detailed.findings.length(), 0)
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "link-name-missing")
+}
+
+///|
+test "static name result keeps diagnostics review order and detailed JSON" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<a href=\"/ok\"><svg><title>Details</title></svg></a>" +
+      "<button><svg><desc>Close</desc></svg></button>" +
+      "<img src=\"missing.png\"></span>",
+      ["link-name-missing", "button-name-missing", "img-alt-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("selected name rules must audit recovered fragments")
+  }
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "img-alt-missing")
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "button-name-missing")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array([{ "rule_id": String(finding), .. }]),
+      "review_items": Array([{ "rule_id": String(review), .. }]),
+      "parse_diagnostics": Array([_, ..]),
+      ..
+    } => {
+      assert_eq(finding, "img-alt-missing")
+      assert_eq(review, "button-name-missing")
+    }
+    _ => fail("detailed JSON must retain the distinct static name outcomes")
   }
 }
