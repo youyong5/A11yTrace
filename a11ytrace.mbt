@@ -759,6 +759,15 @@ fn rule_catalog() -> Array[RuleMetadata] {
       boundary: "Covers label for, aria-labelledby, and aria-describedby only.",
     },
     {
+      id: "label-for-target-not-labelable",
+      summary: "Label for attribute targets a built-in element that is not labelable.",
+      category: Relationships,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://html.spec.whatwg.org/multipage/forms.html#the-label-element",
+      boundary: "Only reports a unique target that is a known non-labelable built-in HTML element; custom elements are skipped.",
+    },
+    {
       id: "table-headers-invalid",
       summary: "Table headers reference is not a unique same-table cell.",
       category: Relationships,
@@ -2191,6 +2200,15 @@ fn collect_findings(
       if is_rule_enabled(enabled_rule_ids, "reference-target-invalid") &&
         has_invalid_reference_target(child, context) {
         findings.push(invalid_reference_target_finding(child, path))
+      }
+      if is_rule_enabled(enabled_rule_ids, "label-for-target-not-labelable") &&
+        label_for_targets_unique_nonlabelable_builtin(child, context) {
+        findings.push(
+          generic_finding(
+            child, path, "label-for-target-not-labelable", "This label for attribute targets a built-in element that is not labelable.",
+            "Point for to a labelable built-in form-related element, or use an appropriate control.",
+          ),
+        )
       }
       if is_rule_enabled(enabled_rule_ids, "form-control-name-missing") &&
         is_form_control_to_check(child) &&
@@ -4112,6 +4130,142 @@ fn has_invalid_reference_target(
   ) ||
   has_invalid_idref_list(node, "aria-labelledby", context) ||
   has_invalid_idref_list(node, "aria-describedby", context)
+}
+
+///|
+fn label_for_targets_unique_nonlabelable_builtin(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  if node.name() != "label" {
+    return false
+  }
+  match node.attrs().get("for") {
+    Some(Some(value)) if !value.trim().is_empty() =>
+      match context.id_nodes.get(value.trim().to_owned()) {
+        Some([target]) => is_known_nonlabelable_builtin_element(target)
+        _ => false
+      }
+    _ => false
+  }
+}
+
+///|
+fn is_known_nonlabelable_builtin_element(node : @dom.Node) -> Bool {
+  match node.name() {
+    "button" | "meter" | "output" | "progress" | "select" | "textarea" => false
+    "input" => input_type(node) == "hidden"
+    "a"
+    | "abbr"
+    | "address"
+    | "area"
+    | "article"
+    | "aside"
+    | "audio"
+    | "b"
+    | "base"
+    | "bdi"
+    | "bdo"
+    | "blockquote"
+    | "body"
+    | "br"
+    | "canvas"
+    | "caption"
+    | "cite"
+    | "code"
+    | "col"
+    | "colgroup"
+    | "data"
+    | "datalist"
+    | "dd"
+    | "del"
+    | "details"
+    | "dfn"
+    | "dialog"
+    | "div"
+    | "dl"
+    | "dt"
+    | "em"
+    | "embed"
+    | "fieldset"
+    | "figcaption"
+    | "figure"
+    | "footer"
+    | "form"
+    | "h1"
+    | "h2"
+    | "h3"
+    | "h4"
+    | "h5"
+    | "h6"
+    | "head"
+    | "header"
+    | "hgroup"
+    | "hr"
+    | "html"
+    | "i"
+    | "iframe"
+    | "img"
+    | "ins"
+    | "kbd"
+    | "label"
+    | "legend"
+    | "li"
+    | "link"
+    | "main"
+    | "map"
+    | "mark"
+    | "math"
+    | "menu"
+    | "meta"
+    | "nav"
+    | "noscript"
+    | "object"
+    | "ol"
+    | "optgroup"
+    | "option"
+    | "p"
+    | "picture"
+    | "pre"
+    | "q"
+    | "rb"
+    | "rp"
+    | "rt"
+    | "rtc"
+    | "ruby"
+    | "s"
+    | "samp"
+    | "script"
+    | "search"
+    | "section"
+    | "slot"
+    | "small"
+    | "source"
+    | "span"
+    | "strong"
+    | "style"
+    | "sub"
+    | "summary"
+    | "sup"
+    | "svg"
+    | "table"
+    | "tbody"
+    | "td"
+    | "template"
+    | "tfoot"
+    | "th"
+    | "thead"
+    | "time"
+    | "title"
+    | "tr"
+    | "track"
+    | "u"
+    | "ul"
+    | "var"
+    | "video"
+    | "wbr" => true
+    _ => false
+  }
 }
 
 ///|

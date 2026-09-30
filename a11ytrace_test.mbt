@@ -528,11 +528,11 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 71)
+  assert_eq(rules.length(), 72)
   assert_eq(rules[0].id, "img-alt-missing")
-  assert_eq(rules[19].id, "meta-refresh-delay")
-  assert_eq(rules[20].id, "aria-state-value-invalid")
-  assert_eq(rules[21].id, "button-implicit-submit")
+  assert_eq(rules[20].id, "meta-refresh-delay")
+  assert_eq(rules[21].id, "aria-state-value-invalid")
+  assert_eq(rules[22].id, "button-implicit-submit")
   rules[0] = {
     id: "changed",
     summary: "changed",
@@ -566,6 +566,15 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("range-value metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("label-for-target-not-labelable") {
+    Some(rule) => {
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+    }
+    None => fail("label-target metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -941,19 +950,19 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 71)
+  assert_eq(rule_ids.length(), 72)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
   assert_eq(rule_ids[6], "document-title-missing")
   assert_eq(rule_ids[9], "duplicate-id")
   assert_eq(rule_ids[10], "reference-target-invalid")
-  assert_eq(rule_ids[12], "area-alt-missing")
-  assert_eq(rule_ids[13], "aria-hidden-focus-review")
-  assert_eq(rule_ids[18], "aria-abstract-role")
-  assert_eq(rule_ids[19], "meta-refresh-delay")
-  assert_eq(rule_ids[20], "aria-state-value-invalid")
-  assert_eq(rule_ids[21], "button-implicit-submit")
+  assert_eq(rule_ids[13], "area-alt-missing")
+  assert_eq(rule_ids[14], "aria-hidden-focus-review")
+  assert_eq(rule_ids[19], "aria-abstract-role")
+  assert_eq(rule_ids[20], "meta-refresh-delay")
+  assert_eq(rule_ids[21], "aria-state-value-invalid")
+  assert_eq(rule_ids[22], "button-implicit-submit")
   assert_true(rule_ids.contains("aria-attribute-undefined"))
   assert_true(rule_ids.contains("role-value-invalid"))
   assert_true(rule_ids.contains("table-scope-invalid"))
@@ -963,6 +972,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("role-textbox-name-missing"))
   assert_true(rule_ids.contains("role-searchbox-name-missing"))
   assert_true(rule_ids.contains("aria-range-value-invalid"))
+  assert_true(rule_ids.contains("label-for-target-not-labelable"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -1942,6 +1952,68 @@ test "reports invalid label and ARIA references without claiming names are missi
     }
     Audited(_) => fail("the fragment should not have parser diagnostics")
     ConfigurationError(_) => fail("known rule must be accepted")
+  }
+}
+
+///|
+test "label for reports only unique known built-in targets that are not labelable" {
+  let selected = ["label-for-target-not-labelable", "reference-target-invalid"]
+  let invalid = "<div id=\"plain\"></div><input id=\"secret\" type=\"hidden\">" +
+    "<label for=\"plain\">Plain</label><label for=\"secret\">Secret</label>"
+  match @a11ytrace.audit_html_fragment_with_rules(invalid, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "label-for-target-not-labelable")
+      assert_eq(findings[0].element_path, "label:nth-of-type(1)")
+      assert_eq(findings[1].rule_id, "label-for-target-not-labelable")
+      assert_eq(findings[1].element_path, "label:nth-of-type(2)")
+    }
+    Audited(_) => fail("unique non-labelable built-in targets must report")
+    ConfigurationError(_) => fail("the label target rule must be selectable")
+  }
+  let valid = "<button id=\"button\"></button><input id=\"input\">" +
+    "<meter id=\"meter\"></meter><output id=\"output\"></output>" +
+    "<progress id=\"progress\"></progress><select id=\"select\"></select>" +
+    "<textarea id=\"textarea\"></textarea>" +
+    "<label for=\"button\">Button</label><label for=\"input\">Input</label>" +
+    "<label for=\"meter\">Meter</label><label for=\"output\">Output</label>" +
+    "<label for=\"progress\">Progress</label><label for=\"select\">Select</label>" +
+    "<label for=\"textarea\">Textarea</label>"
+  match @a11ytrace.audit_html_fragment_with_rules(valid, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("labelable built-in targets must not report")
+    ConfigurationError(_) => fail("the label target rule must be selectable")
+  }
+}
+
+///|
+test "label for keeps missing duplicate and custom targets conservative" {
+  let selected = [
+    "label-for-target-not-labelable", "reference-target-invalid", "duplicate-id",
+  ]
+  let markup = "<label for=\"missing\">Missing</label>" +
+    "<div id=\"duplicate\"></div><div id=\"duplicate\"></div>" +
+    "<label for=\"duplicate\">Duplicate</label>" +
+    "<my-control id=\"custom\"></my-control><label for=\"custom\">Custom</label>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "reference-target-invalid")
+      assert_eq(findings[1].rule_id, "duplicate-id")
+      assert_eq(findings[2].rule_id, "reference-target-invalid")
+    }
+    Audited(_) => fail("invalid ID targets must remain owned by existing rules")
+    ConfigurationError(_) => fail("known label relationship rules must audit")
+  }
+  match
+    @a11ytrace.audit_html_with_rules(
+      "<!doctype html><html><body><div id=\"plain\"></div><label for=\"plain\">Plain</label></body></html>",
+      ["label-for-target-not-labelable"],
+    ) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) =>
+      fail("the relationship rule must also audit complete documents")
+    ConfigurationError(_) => fail("the label target rule must be selectable")
   }
 }
 

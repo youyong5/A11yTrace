@@ -4,8 +4,8 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Current development checkout
 
-This checkout provides 71 selectable built-in IDs, deliberately separated into
-41 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
+This checkout provides 72 selectable built-in IDs, deliberately separated into
+42 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
 directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
@@ -196,7 +196,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 71 independently selectable checks and review
+The rule directory now has 72 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -217,7 +217,7 @@ from confirmed findings.
 
 `document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
 
-`reference-target-invalid` reports missing or ambiguous non-empty targets used by `label[for]`, `aria-labelledby`, or `aria-describedby`; it does not call a separately named control “unnamed” merely because one of its references is invalid. `table-headers-invalid` checks that each `headers` token resolves to another unique `td` or `th` in the same nearest table. `area-alt-missing` requires non-empty `alt` on an `<area href>`; an area without `href` is outside that rule.
+`reference-target-invalid` reports missing or ambiguous non-empty targets used by `label[for]`, `aria-labelledby`, or `aria-describedby`; it does not call a separately named control “unnamed” merely because one of its references is invalid. `label-for-target-not-labelable` separately reports only a unique `label[for]` target that is a known non-labelable built-in HTML element, such as a `div` or hidden input; it accepts button, non-hidden input, meter, output, progress, select, and textarea, and skips custom elements because form association is not statically knowable. `table-headers-invalid` checks that each `headers` token resolves to another unique `td` or `th` in the same nearest table. `area-alt-missing` requires non-empty `alt` on an `<area href>`; an area without `href` is outside that rule.
 
 `body-aria-hidden` reports `aria-hidden="true"` on the body of a complete document. `multiple-main` is a static structural prompt for every main after the first in a complete document. When a document has multiple `<nav>` landmarks, `navigation-landmark-name-missing` reports a landmark without a supported static distinguishing name and `navigation-landmark-name-duplicate` reports a later repeated static name. These page-structure rules do not run for fragments.
 

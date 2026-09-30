@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 71 stable IDs include confirmed static findings, structural hints, and
+The 72 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 71
-selectable IDs separately as 41 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 72
+selectable IDs separately as 42 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -159,6 +159,23 @@ yet; no target-type or runtime ownership claim is made.
 The scope follows HTML-Validate's [no-missing-references](https://html-validate.org/rules/no-missing-references.html)
 approach for these selected attributes, with conservative fragment-local
 resolution.
+
+## `label-for-target-not-labelable`
+
+Reports a `label[for]` only when its non-empty IDREF resolves to exactly one
+target in the audited document or fragment and that target is a known built-in
+HTML element that cannot be labelable. A plain `<div>` and an
+`<input type="hidden">` therefore report. It accepts the built-in labelable
+set: `<button>`, non-hidden `<input>`, `<meter>`, `<output>`, `<progress>`,
+`<select>`, and `<textarea>`.
+
+Missing and duplicate IDs are deliberately not repeated here:
+`reference-target-invalid` remains their one relationship Finding. Unknown or
+custom element names are also skipped, because static markup alone cannot say
+whether a custom element is form-associated and therefore labelable. The rule
+does not infer accessible names or assert that every instance is a WCAG
+failure; it is a definite HTML label-association/content-model error based on
+the [HTML label element](https://html.spec.whatwg.org/multipage/forms.html#the-label-element).
 
 ## `table-headers-invalid`
 
