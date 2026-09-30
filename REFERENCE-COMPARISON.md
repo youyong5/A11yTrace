@@ -35,7 +35,7 @@ parsing, but does not copy the source code of any auditing tool.
 | Timed meta refresh | Partially supported | Complete documents with a supported numeric non-zero delay are reported; loop detection and HTML-Validate's long-delay option are not implemented. |
 | Script-created or runtime-mutated DOM state | Not supported automatically | The library audits only the supplied static markup. |
 | WCAG 2.1/2.2 A/AA coverage index | Supported as a capability directory | `wcag_aa_criteria()` records per-criterion version presence, narrow automatic mappings, review steps, and the 2.2 removal of 4.1.1; it is not a conformance engine. |
-| ARIA widget roles and required properties | Partially supported | Narrow checks cover custom button/link/radio and selected named widget roles, four required-property patterns and selected IDREF attributes; A11yTrace does not claim complete role/attribute validation or browser fallback processing. |
+| ARIA widget roles and required properties | Partially supported | Narrow checks cover custom button/link/radio/textbox/searchbox and selected named widget roles, four required-property patterns and selected IDREF attributes; A11yTrace does not claim complete role/attribute validation or browser fallback processing. |
 | Media, keyboard, focus, target size and authentication | Manual-review markers | Located review items identify relevant markup but deliberately require browser/runtime verification. |
 
 The comparison is deliberately not a coverage claim for HTML-Validate,

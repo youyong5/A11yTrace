@@ -2,7 +2,7 @@
 
 This is the release-review inventory for commit `9b76cb4` and its corrective
 follow-up. It deliberately distinguishes directory metadata from execution:
-there are **68 selectable metadata IDs**, comprising **38 confirmed-finding
+there are **70 selectable metadata IDs**, comprising **40 confirmed-finding
 checks**, **6 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -44,6 +44,8 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | role-button-name-missing | new | confirmed/review | effective custom `role=button` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept the shared static name sources |
 | role-link-name-missing | new | confirmed/review | effective custom `role=link` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom button and link roles accept the shared static name sources |
 | role-radio-name-missing | new | confirmed/review | effective custom `role=radio` lacks a supported static name; SVG source becomes review | 4.1.2 | EA/H | custom radio roles accept names and report empty effective roles |
+| role-textbox-name-missing | new | confirmed/review | effective custom `role=textbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
+| role-searchbox-name-missing | new | confirmed/review | effective custom `role=searchbox` lacks author-provided `aria-labelledby`, `aria-label`, or title; SVG-only IDREF becomes review | 4.1.2 | EA/H | custom text input roles distinguish author names from editable content and placeholders |
 | aria-required-property-missing | new | confirmed | custom checkbox/switch/radio lacks checked, combobox expanded, or slider valuenow | 4.1.2 | EA/H | radio required state and values distinguish custom and native markup |
 | aria-idref-invalid | new | confirmed | selected ARIA local IDREF missing/ambiguous | 4.1.2 | EA/H | extended references and viewport check handle valid tokens and document scope |
 | role-checkbox-name-missing | new | confirmed/review | checkbox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |

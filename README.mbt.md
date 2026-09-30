@@ -2,10 +2,10 @@
 
 A11yTrace is a small, pure MoonBit library for statically checking HTML accessibility rules.
 
-## Version 0.3.0
+## Current development checkout
 
-This checkout provides 68 selectable built-in IDs, deliberately separated into
-38 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
+This checkout provides 70 selectable built-in IDs, deliberately separated into
+40 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
 directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
@@ -196,7 +196,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 68 independently selectable checks and review
+The rule directory now has 70 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -224,6 +224,8 @@ from confirmed findings.
 `aria-hidden-focus-review` is a review item rather than a confirmed finding. It identifies a potentially focusable native element or explicit `tabindex` within an `aria-hidden="true"` element or ancestor; descendant `aria-hidden="false"` cannot undo an ancestor's hidden state. Disabled native controls are excluded, but `aria-disabled` alone is not. CSS, scripting, and browser focus behavior decide the final outcome. `aria-abstract-role` reports an abstract ARIA 1.2 role only when no concrete fallback token exists. `role-value-invalid` reports a non-empty role list only when it has no concrete WAI-ARIA 1.2 fallback, so `role="future-role button"` is accepted and `role="widget checkbox"` is checked as a checkbox without a second abstract-role finding.
 
 `role-button-name-missing`, `role-link-name-missing`, and `role-radio-name-missing` check effective custom `role="button"`, `role="link"`, and `role="radio"` elements for the same bounded static sources as other name rules: descendant text, non-empty image alt, `aria-labelledby`, `aria-label`, and title. Native buttons, `<a href>`, and form controls are excluded when an existing native name rule already owns the element, avoiding duplicate name findings. SVG-only cases become ReviewItems rather than definite missing-name findings. Custom radios also require `aria-checked`; native `input[type="radio"]` is not reported for using its HTML state instead.
+
+`role-textbox-name-missing` and `role-searchbox-name-missing` check effective custom `role="textbox"` and `role="searchbox"` only for author-provided static names: a supported local `aria-labelledby` target, non-empty `aria-label`, or fallback title. They deliberately do not treat ordinary descendants, `contenteditable` text, `placeholder`, or `aria-placeholder` as names. Native `<input>` and `<textarea>` remain under `form-control-name-missing`. An `aria-labelledby` target containing SVG without another supported static source becomes a ReviewItem because this bounded parser does not compute SVG/browser naming.
 
 `meta-refresh-delay` applies only to complete documents and reports a `meta[http-equiv="refresh"]` with a supported numeric delay greater than zero. It does not check refresh loops, long-delay exceptions, malformed delay syntax, or runtime changes. `aria-attribute-undefined` checks only whether an `aria-*` name belongs to WAI-ARIA 1.2, including 1.2 additions and deprecated-but-defined names; it does not validate permission or values. `aria-state-value-invalid` checks only these explicitly listed static values: boolean `aria-busy`, `aria-disabled`, `aria-modal`, `aria-multiline`, `aria-multiselectable`, `aria-readonly`, and `aria-required`; true/false/undefined `aria-expanded` and `aria-hidden`; tristate `aria-checked` (except effective `role="radio"`, which accepts only true/false) and `aria-pressed`; and token values for `aria-current` and `aria-invalid`. `table-scope-invalid` only reports an explicit invalid `th[scope]` keyword, never an omitted scope or a `td[scope]`; it does not infer table associations.
 

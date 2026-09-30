@@ -900,6 +900,24 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "Checks effective role=radio only when no native form-control name rule already applies; SVG-only cases become review items.",
     ),
     rule(
+      "role-textbox-name-missing",
+      "Custom textbox role lacks a supported author-provided static name.",
+      ContentName,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#textbox",
+      "Checks effective role=textbox only when no native form-control name rule already applies; text content, contenteditable content, and placeholders are not name sources.",
+    ),
+    rule(
+      "role-searchbox-name-missing",
+      "Custom searchbox role lacks a supported author-provided static name.",
+      ContentName,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#searchbox",
+      "Checks effective role=searchbox only when no native form-control name rule already applies; text content, contenteditable content, and placeholders are not name sources.",
+    ),
+    rule(
       "aria-required-property-missing",
       "Selected ARIA role omits a required state or property.",
       Aria,
@@ -2252,8 +2270,8 @@ fn collect_extended_aria_findings(
     if custom_name_rule is Some(rule_id) &&
       is_rule_enabled(enabled, rule_id) &&
       is_custom_role_name_target(node) &&
-      !has_generic_static_name(node, context) {
-      if has_potential_svg_name_source(node) {
+      !has_custom_role_static_name(node, role_name, context) {
+      if has_custom_role_uncertain_name_source(node, role_name, context) {
         review_items_for_svg_name(node, path, review_items, rule_id)
       } else {
         findings.push(
@@ -2686,6 +2704,8 @@ fn custom_role_name_rule_id(role : String) -> String? {
     "button" => Some("role-button-name-missing")
     "link" => Some("role-link-name-missing")
     "radio" => Some("role-radio-name-missing")
+    "textbox" => Some("role-textbox-name-missing")
+    "searchbox" => Some("role-searchbox-name-missing")
     _ => None
   }
 }
@@ -2704,6 +2724,83 @@ fn has_generic_static_name(node : @dom.Node, context : AuditContext) -> Bool {
   has_nonempty_visible_text(node) ||
   has_nonempty_image_alt(node) ||
   has_nonempty_attribute(node, "title")
+}
+
+///|
+fn has_custom_role_static_name(
+  node : @dom.Node,
+  role : String,
+  context : AuditContext,
+) -> Bool {
+  if role is ("textbox" | "searchbox") {
+    return has_author_only_text_input_name(node, context)
+  }
+  has_generic_static_name(node, context)
+}
+
+///|
+fn has_custom_role_uncertain_name_source(
+  node : @dom.Node,
+  role : String,
+  context : AuditContext,
+) -> Bool {
+  if role is ("textbox" | "searchbox") {
+    return has_uncertain_labelledby_svg_source(node, context)
+  }
+  has_potential_svg_name_source(node)
+}
+
+///|
+fn has_author_only_text_input_name(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  has_supported_text_input_labelledby_name(node, context) ||
+  has_nonempty_attribute(node, "aria-label") ||
+  has_nonempty_attribute(node, "title")
+}
+
+///|
+fn has_supported_text_input_labelledby_name(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  match node.attrs().get("aria-labelledby") {
+    Some(Some(value)) => {
+      for id in labelledby_idref_tokens(value) {
+        match context.id_nodes.get(id) {
+          Some([target]) if !has_potential_svg_name_source(target) =>
+            if static_name_from_labelledby_target(target) is Some(_) {
+              return true
+            }
+          Some([target]) if has_nonempty_attribute(target, "aria-label") ||
+            has_nonempty_attribute(target, "title") => return true
+          _ => ()
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
+fn has_uncertain_labelledby_svg_source(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  match node.attrs().get("aria-labelledby") {
+    Some(Some(value)) => {
+      for id in labelledby_idref_tokens(value) {
+        match context.id_nodes.get(id) {
+          Some([target]) if has_potential_svg_name_source(target) => return true
+          _ => ()
+        }
+      }
+      false
+    }
+    _ => false
+  }
 }
 
 ///|

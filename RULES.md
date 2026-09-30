@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 68 stable IDs include confirmed static findings, structural hints, and
+The 70 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 68
-selectable IDs separately as 38 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 70
+selectable IDs separately as 40 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -44,7 +44,7 @@ New narrow static rules are intentionally bounded: selected ARIA required
 property checks cover custom checkbox/switch/radio `aria-checked`, combobox
 `aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover
 `aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
-The role-name checks cover custom button/link/radio, checkbox, combobox, slider,
+The role-name checks cover custom button/link/radio/textbox/searchbox, checkbox, combobox, slider,
 progressbar, meter, image, dialog and alertdialog roles with the same limited static naming
 sources as native-name rules. They do not claim full ARIA role validation or
 browser name computation. `nested-interactive` only flags interactive
@@ -341,6 +341,28 @@ Finding because SVG/browser name sources are not reliably computed. This is a
 bounded static presence check informed by [Accessible Name and Description
 Computation 1.2](https://www.w3.org/TR/accname-1.2/), not a complete browser
 AccName implementation or WCAG conformance conclusion.
+
+## `role-textbox-name-missing` and `role-searchbox-name-missing`
+
+Report an effective custom `role="textbox"` or `role="searchbox"` without a
+supported author-provided static name. They accept a uniquely resolved local
+`aria-labelledby` target with a supported static source, a non-empty
+`aria-label`, or fallback `title`. The effective role follows the same ordered
+concrete-role fallback as the rest of the library, so
+`role="future-role searchbox"` is checked as a searchbox.
+
+These author-only role checks deliberately do **not** accept ordinary
+descendant text, text entered through `contenteditable`, `placeholder`, or
+`aria-placeholder` as names. Native `<input>` and `<textarea>` are excluded
+because `form-control-name-missing` already owns them. A referenced target that
+contains SVG and has no other supported static name source produces a
+ReviewItem instead of a missing-name Finding: this parser does not compute SVG
+or browser accessible-name behavior. Missing, duplicate, or fragment-external
+IDREF targets are not names and may separately be reported by the reference
+rule when enabled. This is a bounded static check informed by [WAI-ARIA 1.2
+textbox](https://www.w3.org/TR/wai-aria-1.2/#textbox) and
+[searchbox](https://www.w3.org/TR/wai-aria-1.2/#searchbox), not a complete
+AccName or keyboard-interaction implementation.
 
 ## `aria-required-property-missing` and `aria-state-value-invalid`
 

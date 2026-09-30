@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 68)
+  assert_eq(rules.length(), 70)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -592,6 +592,16 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("custom radio name metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("role-textbox-name-missing") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::ContentName)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("custom text-input name metadata must be available")
   }
 }
 
@@ -918,7 +928,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 68)
+  assert_eq(rule_ids.length(), 70)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -937,6 +947,8 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("role-button-name-missing"))
   assert_true(rule_ids.contains("role-link-name-missing"))
   assert_true(rule_ids.contains("role-radio-name-missing"))
+  assert_true(rule_ids.contains("role-textbox-name-missing"))
+  assert_true(rule_ids.contains("role-searchbox-name-missing"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2339,6 +2351,76 @@ test "radio required state and values distinguish custom and native markup" {
     Audited(_) =>
       fail("radio state checks must distinguish missing and invalid values")
     ConfigurationError(_) => fail("known radio state rules must be selectable")
+  }
+}
+
+///|
+test "custom textbox and searchbox roles require author-provided names" {
+  let selected = ["role-textbox-name-missing", "role-searchbox-name-missing"]
+  let named = "<span id=\"search-label\">Search catalog</span>" +
+    "<svg id=\"svg-author-name\" aria-label=\"Search icon\"></svg>" +
+    "<div role=\"textbox\" aria-labelledby=\"search-label\"></div>" +
+    "<div role=\"searchbox\" aria-label=\"Search site\"></div>" +
+    "<div role=\"textbox\" title=\"Notes\"></div>" +
+    "<div role=\"searchbox\" aria-labelledby=\"svg-author-name\"></div>" +
+    "<div role=\"future-role searchbox\" aria-label=\"Fallback search\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(named, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("supported custom text-input names must not report")
+    ConfigurationError(_) => fail("custom text-input rules must be selectable")
+  }
+  let unnamed = "<div role=\"textbox\"></div>" +
+    "<div role=\"searchbox\" contenteditable>Typed search</div>" +
+    "<div role=\"textbox\" placeholder=\"Email\">Visible content</div>" +
+    "<div role=\"searchbox\" aria-placeholder=\"Search\"></div>" +
+    "<div role=\"future-role textbox\">Content is not a name</div>"
+  match @a11ytrace.audit_html_fragment_with_rules(unnamed, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 5)
+      assert_eq(findings[0].rule_id, "role-textbox-name-missing")
+      assert_eq(findings[1].rule_id, "role-searchbox-name-missing")
+      assert_eq(findings[2].rule_id, "role-textbox-name-missing")
+      assert_eq(findings[3].rule_id, "role-searchbox-name-missing")
+      assert_eq(findings[4].rule_id, "role-textbox-name-missing")
+    }
+    Audited(_) =>
+      fail(
+        "contenteditable, descendants, and placeholders must not name text roles",
+      )
+    ConfigurationError(_) => fail("custom text-input rules must be selectable")
+  }
+}
+
+///|
+test "custom text input roles keep native findings separate and review SVG IDREFs" {
+  let fragment = "<input><textarea></textarea>" +
+    "<svg id=\"search-icon\"><title>Search</title></svg>" +
+    "<div role=\"searchbox\" aria-labelledby=\"search-icon\"></div>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "form-control-name-missing", "role-textbox-name-missing", "role-searchbox-name-missing",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known native and custom text-input name rules must audit")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "form-control-name-missing")
+  assert_eq(detailed.findings[1].rule_id, "form-control-name-missing")
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "role-searchbox-name-missing")
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      "review_items": Array([{ "rule_id": String(review), .. }]),
+      ..
+    } => {
+      assert_eq(first, "form-control-name-missing")
+      assert_eq(second, "form-control-name-missing")
+      assert_eq(review, "role-searchbox-name-missing")
+    }
+    _ => fail("detailed JSON must retain custom text-input name reviews")
   }
 }
 
