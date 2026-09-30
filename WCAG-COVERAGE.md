@@ -76,7 +76,7 @@ are intentionally not converted into asserted violations.
 ## Not WCAG conformance findings
 
 `heading-level-skipped`, `multiple-main`, navigation landmark prompts,
-`button-implicit-submit`, `viewport-zoom-disabled`, and the label association
-content-model checks are structure or
+`button-implicit-submit`, `viewport-zoom-disabled`, and the two label
+association/content-model checks are structure or
 resilience prompts. They can be useful engineering signals, but A11yTrace does
 not label them as automatic WCAG failures.

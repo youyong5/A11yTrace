@@ -528,11 +528,11 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 72)
+  assert_eq(rules.length(), 73)
   assert_eq(rules[0].id, "img-alt-missing")
-  assert_eq(rules[20].id, "meta-refresh-delay")
-  assert_eq(rules[21].id, "aria-state-value-invalid")
-  assert_eq(rules[22].id, "button-implicit-submit")
+  assert_eq(rules[21].id, "meta-refresh-delay")
+  assert_eq(rules[22].id, "aria-state-value-invalid")
+  assert_eq(rules[23].id, "button-implicit-submit")
   rules[0] = {
     id: "changed",
     summary: "changed",
@@ -575,6 +575,15 @@ test "rule directory exposes stable metadata and copied rule selections" {
       assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
     }
     None => fail("label-target metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("label-multiple-labelable-descendants") {
+    Some(rule) => {
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+    }
+    None => fail("multiple-label metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -950,19 +959,19 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 72)
+  assert_eq(rule_ids.length(), 73)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
   assert_eq(rule_ids[6], "document-title-missing")
   assert_eq(rule_ids[9], "duplicate-id")
   assert_eq(rule_ids[10], "reference-target-invalid")
-  assert_eq(rule_ids[13], "area-alt-missing")
-  assert_eq(rule_ids[14], "aria-hidden-focus-review")
-  assert_eq(rule_ids[19], "aria-abstract-role")
-  assert_eq(rule_ids[20], "meta-refresh-delay")
-  assert_eq(rule_ids[21], "aria-state-value-invalid")
-  assert_eq(rule_ids[22], "button-implicit-submit")
+  assert_eq(rule_ids[14], "area-alt-missing")
+  assert_eq(rule_ids[15], "aria-hidden-focus-review")
+  assert_eq(rule_ids[20], "aria-abstract-role")
+  assert_eq(rule_ids[21], "meta-refresh-delay")
+  assert_eq(rule_ids[22], "aria-state-value-invalid")
+  assert_eq(rule_ids[23], "button-implicit-submit")
   assert_true(rule_ids.contains("aria-attribute-undefined"))
   assert_true(rule_ids.contains("role-value-invalid"))
   assert_true(rule_ids.contains("table-scope-invalid"))
@@ -973,6 +982,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("role-searchbox-name-missing"))
   assert_true(rule_ids.contains("aria-range-value-invalid"))
   assert_true(rule_ids.contains("label-for-target-not-labelable"))
+  assert_true(rule_ids.contains("label-multiple-labelable-descendants"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2014,6 +2024,64 @@ test "label for keeps missing duplicate and custom targets conservative" {
     Audited(_) =>
       fail("the relationship rule must also audit complete documents")
     ConfigurationError(_) => fail("the label target rule must be selectable")
+  }
+}
+
+///|
+test "label reports multiple known labelable descendants only once" {
+  let selected = ["label-multiple-labelable-descendants"]
+  let markup = "<label>First <input><select></select></label>" +
+    "<label for=\"chosen\">Chosen <input id=\"chosen\"><textarea></textarea></label>" +
+    "<label><input type=\"hidden\"><meter></meter><output></output></label>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "label-multiple-labelable-descendants")
+      assert_eq(findings[0].element_path, "label:nth-of-type(1)")
+      assert_eq(findings[1].rule_id, "label-multiple-labelable-descendants")
+      assert_eq(findings[1].element_path, "label:nth-of-type(2)")
+      assert_eq(findings[2].rule_id, "label-multiple-labelable-descendants")
+      assert_eq(findings[2].element_path, "label:nth-of-type(3)")
+    }
+    Audited(_) => fail("each invalid label must report exactly once")
+    ConfigurationError(_) =>
+      fail("the multiple-labelable rule must be selectable")
+  }
+}
+
+///|
+test "label multiple-descendant rule accepts one control and skips custom or template content" {
+  let selected = ["label-multiple-labelable-descendants"]
+  let valid = "<input id=\"shared\"><label for=\"shared\">First</label><label for=\"shared\">Second</label>" +
+    "<label>One <input></label><label><input type=\"hidden\"><textarea></textarea></label>" +
+    "<label><my-control></my-control><another-control></another-control></label>" +
+    "<label><input><template><select></select></template></label>"
+  match @a11ytrace.audit_html_fragment_with_rules(valid, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("one built-in control and uncertain custom content must not report")
+    ConfigurationError(_) =>
+      fail("the multiple-labelable rule must be selectable")
+  }
+  let document = "<!doctype html><html><body><label><button></button><progress></progress></label></body></html>"
+  let result = match @a11ytrace.audit_html_with_rules(document, selected) {
+    Audited(result) => result
+    ConfigurationError(_) =>
+      fail("the multiple-labelable rule must audit documents")
+  }
+  match result {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      match @json.parse(@a11ytrace.render_audit_json(result)) {
+        { "findings": Array([{ "rule_id": String(rule_id), .. }]), .. } =>
+          assert_eq(rule_id, "label-multiple-labelable-descendants")
+        _ =>
+          fail(
+            "existing audit JSON must retain the label content-model finding",
+          )
+      }
+    }
+    _ => fail("valid document syntax must retain its content-model finding")
   }
 }
 

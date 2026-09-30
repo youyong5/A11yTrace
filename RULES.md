@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 72 stable IDs include confirmed static findings, structural hints, and
+The 73 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 72
-selectable IDs separately as 42 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 73
+selectable IDs separately as 43 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -176,6 +176,22 @@ whether a custom element is form-associated and therefore labelable. The rule
 does not infer accessible names or assert that every instance is a WCAG
 failure; it is a definite HTML label-association/content-model error based on
 the [HTML label element](https://html.spec.whatwg.org/multipage/forms.html#the-label-element).
+
+## `label-multiple-labelable-descendants`
+
+Reports each `<label>` once when it has more than one known built-in labelable
+descendant. The count includes `<button>`, non-hidden `<input>`, `<meter>`,
+`<output>`, `<progress>`, `<select>`, and `<textarea>`. A `hidden` input and
+contents of a nested `<template>` do not count. An explicit `for` that points
+to one descendant does not make a second descendant valid: the label content
+model permits only its labeled control among labelable descendants.
+
+The rule does not report two separate labels that point to the same one
+control. It also skips custom elements, since their form-associated state and
+labelability cannot be determined from supplied static HTML. This is a
+definite HTML content-model/association signal, not a claim that every result
+alone proves a WCAG failure. It follows the [HTML label content
+model](https://html.spec.whatwg.org/multipage/forms.html#the-label-element).
 
 ## `table-headers-invalid`
 

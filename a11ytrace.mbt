@@ -768,6 +768,15 @@ fn rule_catalog() -> Array[RuleMetadata] {
       boundary: "Only reports a unique target that is a known non-labelable built-in HTML element; custom elements are skipped.",
     },
     {
+      id: "label-multiple-labelable-descendants",
+      summary: "Label contains more than one known labelable built-in descendant.",
+      category: Relationships,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://html.spec.whatwg.org/multipage/forms.html#the-label-element",
+      boundary: "Counts known built-in labelable descendants except hidden inputs; custom elements and template contents are skipped.",
+    },
+    {
       id: "table-headers-invalid",
       summary: "Table headers reference is not a unique same-table cell.",
       category: Relationships,
@@ -2207,6 +2216,17 @@ fn collect_findings(
           generic_finding(
             child, path, "label-for-target-not-labelable", "This label for attribute targets a built-in element that is not labelable.",
             "Point for to a labelable built-in form-related element, or use an appropriate control.",
+          ),
+        )
+      }
+      if is_rule_enabled(
+          enabled_rule_ids, "label-multiple-labelable-descendants",
+        ) &&
+        label_has_multiple_known_labelable_descendants(child) {
+        findings.push(
+          generic_finding(
+            child, path, "label-multiple-labelable-descendants", "This label contains more than one known labelable built-in descendant.",
+            "Associate the label with one control and move additional controls outside the label.",
           ),
         )
       }
@@ -4264,6 +4284,37 @@ fn is_known_nonlabelable_builtin_element(node : @dom.Node) -> Bool {
     | "var"
     | "video"
     | "wbr" => true
+    _ => false
+  }
+}
+
+///|
+fn label_has_multiple_known_labelable_descendants(node : @dom.Node) -> Bool {
+  node.name() == "label" && count_known_labelable_descendants(node) > 1
+}
+
+///|
+fn count_known_labelable_descendants(node : @dom.Node) -> Int {
+  let mut count = 0
+  for child in node.children() {
+    if child.kind() is @dom.Element {
+      if child.name() == "template" {
+        continue
+      }
+      if is_known_labelable_builtin_element(child) {
+        count = count + 1
+      }
+      count = count + count_known_labelable_descendants(child)
+    }
+  }
+  count
+}
+
+///|
+fn is_known_labelable_builtin_element(node : @dom.Node) -> Bool {
+  match node.name() {
+    "button" | "meter" | "output" | "progress" | "select" | "textarea" => true
+    "input" => input_type(node) != "hidden"
     _ => false
   }
 }

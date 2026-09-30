@@ -2,7 +2,7 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **72 selectable metadata IDs**, comprising **42 confirmed-finding
+there are **73 selectable metadata IDs**, comprising **43 confirmed-finding
 checks**, **6 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -28,6 +28,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | duplicate-id | original | confirmed | later non-empty duplicate ID in input scope | 4.1.1 historical / relationship practice | C/O | indexes duplicate IDs once and keeps ambiguous references unnamed |
 | reference-target-invalid | original | confirmed | label-for/labelledby/describedby has missing/ambiguous ID | 1.3.1, 4.1.2 | C/O | reports invalid label and ARIA references without claiming names are missing |
 | label-for-target-not-labelable | new | confirmed | `label[for]` uniquely resolves to a known non-labelable built-in element | HTML label association/content-model practice; not a WCAG verdict | C/O | label for reports only unique known built-in targets that are not labelable; keeps missing duplicate and custom targets conservative |
+| label-multiple-labelable-descendants | new | confirmed | a label contains two or more known built-in labelable descendants | HTML label content-model practice; not a WCAG verdict | C/O | label reports multiple known labelable descendants only once; accepts one control and skips custom or template content |
 | table-headers-invalid | original | confirmed | `headers` target is not another unique cell in same table | 1.3.1 | C/O | checks each table headers token against other cells in the same table |
 | area-alt-missing | original | confirmed | `area[href]` has no non-empty `alt` | 1.1.1, 2.4.4 | C/O | reports clickable image map areas without non-empty alt text |
 | aria-hidden-focus-review | original | manual review | potentially focusable item in `aria-hidden=true` subtree | 4.1.2 review | C/O | aria hidden ancestors cannot be undone and disabled differs from aria disabled |
