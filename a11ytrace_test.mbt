@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 76)
+  assert_eq(rules.length(), 77)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[21].id, "meta-refresh-delay")
   assert_eq(rules[22].id, "aria-state-value-invalid")
@@ -584,6 +584,16 @@ test "rule directory exposes stable metadata and copied rule selections" {
       assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
     }
     None => fail("multiple-label metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("aria-role-attribute-incompatible") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::Aria)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("role attribute compatibility metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -959,7 +969,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 76)
+  assert_eq(rule_ids.length(), 77)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -986,6 +996,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("aria-checked-role-incompatible"))
   assert_true(rule_ids.contains("listitem-orphan"))
   assert_true(rule_ids.contains("fieldset-legend-missing"))
+  assert_true(rule_ids.contains("aria-role-attribute-incompatible"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2947,5 +2958,88 @@ test "fieldset legend prompt requires a direct named first legend" {
     Audited(_) =>
       fail("only missing or empty direct first legends should prompt")
     ConfigurationError(_) => fail("the fieldset legend rule must be selectable")
+  }
+}
+
+///|
+test "role attribute compatibility uses its small inherited and global-property table" {
+  let compatible = "<div role=\"option\" aria-checked=\"true\"></div>" +
+    "<div role=\"searchbox\" aria-autocomplete=\"list\"></div>" +
+    "<div role=\"searchbox\" aria-placeholder=\"Search\"></div>" +
+    "<div role=\"treegrid\" aria-multiselectable=\"true\"></div>" +
+    "<div role=\"button\" aria-describedby=\"help\"></div>" +
+    "<div role=\"button\" aria-label=\"Save\"></div>" +
+    "<span id=\"help\">Help</span>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(compatible, [
+      "aria-checked-role-incompatible", "aria-role-attribute-incompatible",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("documented supported and global attributes must not report")
+    ConfigurationError(_) => fail("the role attribute rule must be selectable")
+  }
+  let incompatible = "<div role=\"button\" aria-autocomplete=\"list\"></div>" +
+    "<div role=\"emphasis\" aria-label=\"Stress\" aria-labelledby=\"label\"></div>" +
+    "<div role=\"future-role button\" aria-placeholder=\"Find\"></div>" +
+    "<div role=\"unknown-role\" aria-placeholder=\"Ignored\"></div>" +
+    "<div role=\"slider\" aria-selected=\"true\"></div>" +
+    "<input aria-autocomplete=\"list\"><button role=\"button\" aria-autocomplete=\"list\">Native</button>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(incompatible, [
+      "aria-role-attribute-incompatible",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].element_path, "div:nth-of-type(1)")
+      assert_true(findings[0].message.contains("aria-autocomplete"))
+      assert_eq(findings[1].element_path, "div:nth-of-type(2)")
+      assert_true(findings[1].message.contains("aria-label"))
+      assert_eq(findings[2].element_path, "div:nth-of-type(2)")
+      assert_true(findings[2].message.contains("aria-labelledby"))
+      assert_eq(findings[3].element_path, "div:nth-of-type(3)")
+      assert_true(findings[3].message.contains("aria-placeholder"))
+    }
+    Audited(_) =>
+      fail("only modeled effective roles and attributes should report")
+    ConfigurationError(_) => fail("the role attribute rule must be selectable")
+  }
+}
+
+///|
+test "role attribute compatibility keeps specialized checked and JSON findings distinct" {
+  let fragment = "<div role=\"button\" aria-checked=\"true\" aria-autocomplete=\"list\"></div>" +
+    "<div role=\"option\" aria-checked=\"true\"></div>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "aria-checked-role-incompatible", "aria-role-attribute-incompatible",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known compatibility rules must audit a fragment")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "aria-checked-role-incompatible")
+  assert_eq(detailed.findings[1].rule_id, "aria-role-attribute-incompatible")
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      ..
+    } => {
+      assert_eq(first, "aria-checked-role-incompatible")
+      assert_eq(second, "aria-role-attribute-incompatible")
+    }
+    _ => fail("JSON must retain one finding per distinct compatibility reason")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "aria-checked-role-incompatible",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) =>
+      fail("selecting the established checked rule keeps its behavior")
+    ConfigurationError(_) =>
+      fail("the established checked rule must remain selectable")
   }
 }

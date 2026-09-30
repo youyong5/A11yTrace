@@ -30,7 +30,7 @@ parsing, but does not copy the source code of any auditing tool.
 | CSS visibility, layout, focusability, and rendered accessibility tree | Not supported automatically | Static HTML cannot determine stylesheet cascades, computed visibility, focus order, shadow DOM, or browser/assistive-technology behavior. These require manual review or browser-based tooling. |
 | `aria-hidden` and focus conflicts | Partially supported | Potentially focusable descendants are emitted as review items; A11yTrace does not assert a rendered focus conflict without CSS and runtime information. |
 | Native landmark structure and names | Partially supported | It checks multiple `main` elements and distinguishes multiple native navigation landmarks using selected static naming sources only. |
-| ARIA role and attribute vocabulary | Partially supported | It detects the complete ARIA 1.2 abstract-role set, undefined `aria-*` names, and ordered concrete WAI-ARIA 1.2 fallback. It does not validate role permission, extension vocabularies, or browser mapping. |
+| ARIA role and attribute vocabulary | Partially supported | It detects the complete ARIA 1.2 abstract-role set, undefined `aria-*` names, and ordered concrete WAI-ARIA 1.2 fallback. A separate documented table checks only selected explicit role/property pairs and inheritance; it is not complete role-permission, extension-vocabulary, ARIA-in-HTML, or browser-mapping validation. |
 | Selected ARIA state and range value tokens | Partially supported | A11yTrace validates only a documented small set of boolean, tristate, token-valued attributes, and exact custom slider/scrollbar numeric range relationships; ACT 6a7281 is broader. |
 | Timed meta refresh | Partially supported | Complete documents with a supported numeric non-zero delay are reported; loop detection and HTML-Validate's long-delay option are not implemented. |
 | Script-created or runtime-mutated DOM state | Not supported automatically | The library audits only the supplied static markup. |
@@ -58,6 +58,19 @@ npx --yes html-validate@11.16.0 --rule no-dup-id:2 examples/comparison/duplicate
 | --- | --- | --- |
 | `meta-refresh-delay.html` | A11yTrace `meta-refresh-delay` and HTML-Validate `meta-refresh` both report the five-second refresh. | HTML-Validate also diagnoses instant refresh loops and offers a long-delay option; A11yTrace does neither. |
 | `duplicate-id.html` | A11yTrace `duplicate-id` and HTML-Validate `no-dup-id` both report the second `duplicate` ID. | A11yTrace attaches its stable element path and uses the same index to make ARIA references ambiguous; it does not validate ID syntax. |
+| `aria-role-attribute-compatibility.html` | The self-authored custom `role=button`/`aria-autocomplete` and `role=emphasis` naming cases are suitable for comparison with axe-core `aria-allowed-attr` and `aria-prohibited-attr`. | axe-core is broader. A11yTrace checks only its published role/property rows, leaves `aria-checked` to its dedicated compatibility rule, and skips native form controls rather than attempting the full ARIA-in-HTML mapping. |
+
+To run that development-only comparison with a ChromeDriver compatible with the
+locally installed Chrome:
+
+```text
+npx --yes @axe-core/cli@4.11.0 --rules aria-allowed-attr,aria-prohibited-attr examples/comparison/aria-role-attribute-compatibility.html
+```
+
+On this checkout the command was attempted on 2026-09-30, but axe-core 4.11.4
+selected ChromeDriver 154 while the installed Chrome was 153.0.8010.53, so no
+axe result is claimed from that run. This tooling mismatch does not affect the
+MoonBit library tests or package and is not added as a dependency.
 
 This small comparison demonstrates selected aligned semantics only. It is not a
 claim of equivalent configuration, parser behavior, rule coverage, or output

@@ -2,7 +2,7 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **76 selectable metadata IDs**, comprising **45 confirmed-finding
+there are **77 selectable metadata IDs**, comprising **46 confirmed-finding
 checks**, **7 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -92,6 +92,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | aria-checked-role-incompatible | next version | confirmed | explicit effective role that does not support `aria-checked` carries that attribute | 4.1.2 static semantic-markup evidence | ES/H | accepts every supported checked role, radio fallback, and native controls; default selection avoids a duplicate malformed-value Finding |
 | listitem-orphan | next version | confirmed | recovered `li` direct parent is not ul/ol/menu | HTML list content-model practice; not a per-instance WCAG verdict | ES/H | reports a root orphan and accepts menu child; template contents are skipped |
 | fieldset-legend-missing | next version | static hint | fieldset with multiple known native labelable descendants has no named first legend | form grouping best practice | ES/H | accepts a named first legend and one-control fieldset; reports empty/missing first legend |
+| aria-role-attribute-incompatible | next version | confirmed | selected defined ARIA property is unsupported by a modeled effective explicit WAI-ARIA 1.2 role | 4.1.2 static semantic-markup evidence | EA/H | role attribute compatibility uses its small inherited and global-property table; JSON keeps dedicated checked findings distinct |
 
 The role-name rows are catalogued as confirmed-finding rules because a definite
 missing author/static name produces a `Finding`; their SVG-only branch produces

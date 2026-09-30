@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><title>ARIA role attribute compatibility fixture</title></head>
+  <body>
+    <div role="button" aria-autocomplete="list">Unsupported autocomplete</div>
+    <div role="button" aria-checked="true">Checked remains a dedicated rule</div>
+    <div role="option" aria-checked="true">Allowed checked state</div>
+    <div role="searchbox" aria-autocomplete="list" aria-placeholder="Search"></div>
+    <div role="treegrid" aria-multiselectable="true"></div>
+    <div role="button" aria-describedby="help">Global relationship</div>
+    <div role="emphasis" aria-label="Stress">Prohibited name</div>
+    <div role="future-role button" aria-placeholder="Find">Fallback role</div>
+    <div role="unknown-role" aria-placeholder="Ignored">Unknown role</div>
+    <input aria-autocomplete="list">
+    <span id="help">Help</span>
+  </body>
+</html>

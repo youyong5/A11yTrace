@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 76 stable IDs include confirmed static findings, structural hints, and
+The 77 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 76
-selectable IDs separately as 45 confirmed-finding checks, 7 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 77
+selectable IDs separately as 46 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -360,6 +360,24 @@ incompatible role owns its `aria-checked` Finding even if that value is also
 malformed, so one attribute does not produce duplicate Findings; selecting the
 established value rule alone retains its value check. It is a static
 semantic-markup finding informed by [WAI-ARIA 1.2 aria-checked](https://www.w3.org/TR/wai-aria-1.2/#aria-checked).
+
+## `aria-role-attribute-incompatible`
+
+Reports a selected, defined `aria-*` property only when the element has an
+effective explicit WAI-ARIA 1.2 role covered by A11yTrace's limited role/property
+table and that role does not support the property. The ordered role fallback is
+shared with the other ARIA rules, so `role="future-role button"` is evaluated
+as `button`. The implementation includes documented `textbox` → `searchbox`
+and `grid` → `treegrid` inheritance, selected `option`/`tab` support, and the
+explicit naming prohibition on `emphasis`.
+
+This is deliberately not a complete role-permission implementation. It skips
+unknown and unmodeled roles, native form controls, and host-language mapping
+questions; it does not reject global relationships such as `aria-describedby`.
+`aria-checked` remains owned by `aria-checked-role-incompatible`, while state
+values, required properties, and numeric ranges remain owned by their existing
+specialized rules. See [ARIA-ROLE-ATTRIBUTE-TABLE.md](ARIA-ROLE-ATTRIBUTE-TABLE.md)
+for the complete checked subset, excluded roles, and ARIA-in-HTML boundary.
 
 ## `listitem-orphan`
 

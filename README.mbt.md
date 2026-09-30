@@ -4,8 +4,8 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Current development checkout
 
-This next-version checkout provides 76 selectable built-in IDs, deliberately
-separated into 45 confirmed Finding checks, 7 static hints, and 24 ReviewItem
+This next-version checkout provides 77 selectable built-in IDs, deliberately
+separated into 46 confirmed Finding checks, 7 static hints, and 24 ReviewItem
 triggers. That directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
@@ -234,7 +234,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 76 independently selectable checks and review
+The rule directory now has 77 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -252,6 +252,16 @@ recovery can change malformed source structure. `fieldset-legend-missing` is a
 static grouping prompt when a fieldset has more than one known native labelable
 descendant but no non-empty first `<legend>`; it is not an asserted WCAG
 failure and does not infer custom form association.
+
+`aria-role-attribute-incompatible` adds a separate, deliberately small
+WAI-ARIA 1.2 role/property table. It checks selected attributes on an
+effective explicit role, including `searchbox` inheritance from `textbox`,
+`treegrid` inheritance from `grid`, and the explicitly name-prohibited
+`emphasis` role. It leaves `aria-checked` to the established specialized rule,
+accepts global relationships such as `aria-describedby`, skips native form
+controls and unknown roles, and does not implement the full ARIA or ARIA-in-HTML
+permission matrix. See [ARIA-ROLE-ATTRIBUTE-TABLE.md](ARIA-ROLE-ATTRIBUTE-TABLE.md)
+for each modeled row and excluded role.
 
 `img-alt-missing` reports an `<img>` that has no `alt` attribute. An explicit `alt=""` is accepted for decorative images, as is any non-empty `alt` value. The rule does not determine whether an image is decorative, whether alternative text is good, or whether a whole document conforms to WCAG.
 

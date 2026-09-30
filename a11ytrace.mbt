@@ -1355,6 +1355,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "https://www.w3.org/WAI/tutorials/forms/grouping/",
       "Prompts only fieldsets with multiple known native labelable descendants; it does not prove a WCAG failure or inspect custom form association.",
     ),
+    rule(
+      "aria-role-attribute-incompatible",
+      "Explicit ARIA role does not support a selected ARIA attribute.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#state_prop_values",
+      "Checks only the documented explicit-role/property pairs in A11yTrace's limited WAI-ARIA 1.2 table; global attributes, unmodeled roles/properties, native form controls, and host-language constraints are outside scope.",
+    ),
   ]
 }
 
@@ -2354,6 +2363,28 @@ fn collect_extended_aria_findings(
   enabled : Array[String],
   context : AuditContext,
 ) -> Unit {
+  if is_rule_enabled(enabled, "aria-checked-role-incompatible") &&
+    has_aria_checked_incompatible_with_explicit_role(node) {
+    findings.push(
+      generic_finding(
+        node, path, "aria-checked-role-incompatible", "This explicit ARIA role does not support aria-checked.",
+        "Use aria-checked only with a role that supports checked state, or use the state supported by this role.",
+      ),
+    )
+  }
+  if is_rule_enabled(enabled, "aria-role-attribute-incompatible") {
+    for attribute in incompatible_modeled_aria_role_attributes(node) {
+      findings.push(
+        generic_finding(
+          node,
+          path,
+          "aria-role-attribute-incompatible",
+          "This explicit ARIA role does not support " + attribute + ".",
+          "Remove " + attribute + ", or use an ARIA role that supports it.",
+        ),
+      )
+    }
+  }
   if is_rule_enabled(enabled, "aria-required-property-missing") {
     match missing_selected_required_aria_property_message(node) {
       Some(message) =>
@@ -2514,15 +2545,6 @@ fn collect_extended_structure_findings(
       generic_finding(
         node, path, "definition-list-structure-invalid", "This direct definition-list child is not dt, dd, or an allowed grouping element.",
         "Use dt and dd (optionally grouped in div) as direct dl children.",
-      ),
-    )
-  }
-  if is_rule_enabled(enabled, "aria-checked-role-incompatible") &&
-    has_aria_checked_incompatible_with_explicit_role(node) {
-    findings.push(
-      generic_finding(
-        node, path, "aria-checked-role-incompatible", "This explicit ARIA role does not support aria-checked.",
-        "Use aria-checked only with a role that supports checked state, or use the state supported by this role.",
       ),
     )
   }
@@ -2770,6 +2792,84 @@ fn has_undefined_aria_attribute(node : @dom.Node) -> Bool {
     }
   }
   false
+}
+
+///|
+fn incompatible_modeled_aria_role_attributes(node : @dom.Node) -> Array[String] {
+  // This intentionally does not try to reconstruct the complete ARIA role
+  // characteristic table.  `aria-checked` belongs to the established
+  // aria-checked-role-incompatible rule, and value/required-property rules
+  // retain their existing owners.
+  if is_native_control_for_role_attribute_compatibility(node) {
+    return []
+  }
+  match primary_role(node) {
+    Some(role) => {
+      let incompatible = []
+      if is_modeled_role_for_attribute_compatibility(role) {
+        for
+          attribute in [
+            "aria-label", "aria-labelledby", "aria-autocomplete", "aria-placeholder",
+            "aria-multiselectable", "aria-selected",
+          ] {
+          if node.attrs().get(attribute) is Some(_) &&
+            !modeled_aria_role_supports_attribute(role, attribute) {
+            incompatible.push(attribute)
+          }
+        }
+      }
+      incompatible
+    }
+    None => []
+  }
+}
+
+///|
+fn is_modeled_role_for_attribute_compatibility(role : String) -> Bool {
+  // A concrete role outside this list is intentionally not inferred from a
+  // partial table.  Add a role only with a reviewed WAI-ARIA 1.2 row.
+  role
+  is ("button"
+  | "combobox"
+  | "emphasis"
+  | "grid"
+  | "listbox"
+  | "option"
+  | "searchbox"
+  | "tab"
+  | "tablist"
+  | "textbox"
+  | "tree"
+  | "treegrid")
+}
+
+///|
+fn is_native_control_for_role_attribute_compatibility(node : @dom.Node) -> Bool {
+  // ARIA in HTML has host-language-specific authoring restrictions.  This
+  // small ARIA-role table is deliberately for custom markup, so native form
+  // controls keep their existing HTML-specific checks instead.
+  node.name() is ("button" | "input" | "select" | "textarea")
+}
+
+///|
+fn modeled_aria_role_supports_attribute(
+  role : String,
+  attribute : String,
+) -> Bool {
+  match attribute {
+    // aria-label and aria-labelledby are globally usable except where a role
+    // explicitly prohibits naming.  This batch models that prohibition for
+    // the WAI-ARIA 1.2 emphasis role only.
+    "aria-label" | "aria-labelledby" => role != "emphasis"
+    // textbox supports these properties; searchbox inherits from textbox.
+    "aria-autocomplete" => role is ("combobox" | "textbox" | "searchbox")
+    "aria-placeholder" => role is ("textbox" | "searchbox")
+    // treegrid inherits the property from grid.
+    "aria-multiselectable" =>
+      role is ("grid" | "listbox" | "tablist" | "tree" | "treegrid")
+    "aria-selected" => role is ("option" | "tab")
+    _ => true
+  }
 }
 
 ///|
