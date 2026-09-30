@@ -2393,7 +2393,7 @@ test "labelledby preserves IDREF order, self labels, and aria-label fallback for
 }
 
 ///|
-test "labelledby self references and cycles use bounded static target computation" {
+test "labelledby self references and cycles use direct target computation" {
   let fragment = "<span id=\"file\">Report</span>" +
     "<button id=\"delete\" aria-label=\"Delete\" aria-labelledby=\"delete file\"></button>" +
     "<span id=\"first\" aria-labelledby=\"second\"></span>" +
@@ -3430,30 +3430,48 @@ test "empty SVG title is not treated as a nonempty static name" {
 }
 
 ///|
-test "bounded labelledby traversal preserves order self labels and safe fallback" {
-  let fragment = "<span id=\"file\">Documentation.pdf</span>" +
-    "<div id=\"delete\" role=\"button\" aria-label=\"Delete\" aria-labelledby=\"delete file\"></div>" +
+test "labelledby targets use direct sources with self fallback hidden and duplicate cases" {
+  let fragment = "<span id=\"end\">Name</span>" +
+    "<span id=\"middle\" aria-labelledby=\"end\"></span>" +
+    "<button aria-labelledby=\"middle\"></button>" +
+    "<span id=\"author\" aria-label=\"Author name\" aria-labelledby=\"end\"></span>" +
+    "<button aria-labelledby=\"author\"></button>" +
+    "<span id=\"file\">Documentation.pdf</span>" +
+    "<button id=\"delete\" aria-label=\"Delete\" aria-labelledby=\"delete file\"></button>" +
+    "<span id=\"empty\"></span><input aria-label=\"Fallback\" aria-labelledby=\"empty\">" +
     "<span id=\"hidden-label\" aria-hidden=\"true\">Hidden label</span>" +
     "<input aria-labelledby=\"hidden-label\">" +
-    "<span id=\"chain-last\">Chain label</span>" +
-    "<span id=\"chain-first\" aria-labelledby=\"chain-last\"></span>" +
-    "<div role=\"button\" aria-labelledby=\"chain-first\"></div>" +
-    "<span id=\"cycle-a\" aria-labelledby=\"cycle-b\"></span>" +
-    "<span id=\"cycle-b\" aria-labelledby=\"cycle-a\"></span>" +
-    "<div role=\"button\" aria-labelledby=\"cycle-a\"></div>" +
-    "<div role=\"button\" aria-label=\"Fallback\" aria-labelledby=\"missing\"></div>" +
+    "<span id=\"duplicate\">One</span><span id=\"duplicate\">Two</span>" +
+    "<button aria-labelledby=\"duplicate\"></button>" +
     "<template><span id=\"outside\">Ignored</span></template>"
   match
     @a11ytrace.audit_html_fragment_with_rules(fragment, [
-      "role-button-name-missing", "form-control-name-missing",
+      "button-name-missing", "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "button-name-missing")
+      assert_eq(findings[0].element_path, "button:nth-of-type(1)")
+      assert_eq(findings[1].rule_id, "button-name-missing")
+      assert_eq(findings[1].element_path, "button:nth-of-type(4)")
+    }
+    Audited(_) =>
+      fail(
+        "only direct target sources may name controls; fallback and hidden text remain usable",
+      )
+    ConfigurationError(_) => fail("affected rules must be selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "reference-target-invalid",
     ]) {
     Audited(Findings(findings)) => {
       assert_eq(findings.length(), 1)
-      assert_eq(findings[0].rule_id, "role-button-name-missing")
-      assert_eq(findings[0].element_path, "div:nth-of-type(3)")
+      assert_eq(findings[0].rule_id, "reference-target-invalid")
+      assert_eq(findings[0].element_path, "button:nth-of-type(4)")
     }
-    Audited(_) => fail("only the all-empty IDREF cycle must remain unnamed")
-    ConfigurationError(_) => fail("affected rules must be selectable")
+    Audited(_) => fail("duplicate targets must remain invalid IDREFs")
+    ConfigurationError(_) => fail("reference rule must be selectable")
   }
 }
 

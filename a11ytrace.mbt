@@ -4033,40 +4033,18 @@ fn static_name_result_from_labelledby(
   node : @dom.Node,
   context : AuditContext,
 ) -> StaticNameResult {
-  let visited : Array[String] = []
-  match node.attrs().get("id") {
-    Some(Some(id)) if !id.trim().is_empty() => visited.push(id)
-    _ => ()
-  }
-  static_name_result_from_labelledby_with_visited(node, context, visited, 0)
-}
-
-///|
-fn static_name_result_from_labelledby_with_visited(
-  node : @dom.Node,
-  context : AuditContext,
-  visited : Array[String],
-  depth : Int,
-) -> StaticNameResult {
   match node.attrs().get("aria-labelledby") {
     Some(Some(value)) => {
       let output = StringBuilder()
       let mut uncertain = false
-      // Keep IDREF order because it determines the resulting flat name. This
-      // is a bounded subset of the AccName traversal: duplicate or missing
-      // targets never establish a name, while cycles and unmodeled SVG naming
-      // leave a distinct uncertain result instead of a false positive.
+      // Keep IDREF order because it determines the resulting flat name. An
+      // IDREF target is already being traversed, so its own aria-labelledby is
+      // skipped and only direct supported sources are used. This also makes
+      // self and cyclic references terminate without inventing a name.
       for id in labelledby_idref_tokens(value) {
         match context.id_nodes.get(id) {
           Some([target]) =>
-            match
-              static_name_result_from_labelledby_target(
-                target,
-                id,
-                context,
-                visited,
-                depth + 1,
-              ) {
+            match static_name_result_from_labelledby_target(target, context) {
               NameConfirmed(text) => {
                 if !output.to_string().is_empty() {
                   output.write_string(" ")
@@ -4097,29 +4075,11 @@ fn static_name_result_from_labelledby_with_visited(
 ///|
 fn static_name_result_from_labelledby_target(
   node : @dom.Node,
-  id : String,
   context : AuditContext,
-  visited : Array[String],
-  depth : Int,
 ) -> StaticNameResult {
-  if depth > 8 {
-    return NameUncertain
-  }
-  if !visited.contains(id) {
-    let next_visited : Array[String] = []
-    for visited_id in visited {
-      next_visited.push(visited_id)
-    }
-    next_visited.push(id)
-    match
-      static_name_result_from_labelledby_with_visited(
-        node, context, next_visited, depth,
-      ) {
-      NameConfirmed(name) => return NameConfirmed(name)
-      NameUncertain => return NameUncertain
-      NameMissing => ()
-    }
-  }
+  // The target has been reached by an aria-labelledby traversal. Its own
+  // aria-labelledby is not followed at this step; use its direct static
+  // sources instead, as required by the applicable AccName recursion step.
   direct_static_name_result(node, context)
 }
 

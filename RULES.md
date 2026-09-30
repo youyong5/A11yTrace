@@ -68,15 +68,15 @@ For every audited DOM, A11yTrace builds one shared context before evaluating
 rules. It indexes non-empty IDs, `label[for]` associations, and local
 `aria-owns` references, skipping inert
 `template` contents. `aria-labelledby` accepts a whitespace-separated list:
-uniquely resolved targets are processed in source IDREF order. The bounded
-static traversal follows further uniquely resolved `aria-labelledby` targets,
-keeps a visited-ID set and a fixed depth limit, and then reads supported direct
-sources: non-empty `aria-label`, ordinary text/descendant image `alt`, a direct
-SVG `<title>`, or fallback `title`. Empty values, missing targets, targets
-outside a supplied fragment, and duplicate-ID targets do not supply a name.
-Self references may contribute their own direct author source while cycles stop
-without inventing a name. A duplicate non-empty ID reports every occurrence
-after the first in the audited input scope.
+uniquely resolved targets are processed in source IDREF order. Each target is
+already reached by an IDREF traversal, so its own `aria-labelledby` is skipped;
+the static subset then reads its direct sources: non-empty `aria-label`,
+ordinary text/descendant image `alt`, a direct SVG `<title>`, or fallback
+`title`. Empty values, missing targets, targets outside a supplied fragment,
+and duplicate-ID targets do not supply a name. Self references may contribute
+their own direct author source while cycles stop without inventing a name. A
+duplicate non-empty ID reports every occurrence after the first in the audited
+input scope.
 
 The context deliberately separates a target being uniquely present from it
 having a supported static name. This lets an existing but empty
@@ -87,7 +87,7 @@ and the checked native/content/title fallbacks; all affected name rules share
 that order. Directly referenced static text is accepted even when markup has
 `hidden` or `aria-hidden`, because this library does not compute CSS or the
 browser accessibility tree. A direct SVG `<title>` is supported; SVG `<desc>`
-and SVG IDREF behavior that cannot be resolved inside the bounded traversal
+and SVG IDREF behavior that cannot be resolved by a supported direct source
 remain uncertain rather than being treated as either a name or a missing name.
 It follows the relevant ordering ideas in [W3C
 Accessible Name and Description Computation 1.2](https://www.w3.org/TR/accname-1.2/),
@@ -587,13 +587,13 @@ This rule is based on the guidance in the [W3C Images Tutorial](https://www.w3.o
 
 Reports `<input>`, `<select>`, and `<textarea>` controls that have no recognizable accessible name. It excludes `input` elements whose type is `hidden`, `submit`, `reset`, `button`, or `image` in this first iteration.
 
-The rule accepts non-empty text from a `<label for="control-id">`, a text-bearing wrapping `<label>` without `for`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. A wrapping label with `for` is only accepted when that value matches the descendant control's `id`. Multiple `aria-labelledby` IDs retain IDREF order; supported targets can include direct SVG `<title>`. Empty labels and ARIA values, missing or empty `aria-labelledby` targets, a bare `id`, and `placeholder` do not count. `title` is a fallback: a visible label is usually better.
+The rule accepts non-empty text from a `<label for="control-id">`, a text-bearing wrapping `<label>` without `for`, non-empty `aria-label`, a supported direct-target `aria-labelledby` result, or non-empty `title`. A wrapping label with `for` is only accepted when that value matches the descendant control's `id`. Multiple `aria-labelledby` IDs retain IDREF order; supported targets can include direct SVG `<title>`. Empty labels and ARIA values, missing or empty `aria-labelledby` targets, a bare `id`, and `placeholder` do not count. `title` is a fallback: a visible label is usually better.
 
 This follows the [W3C Forms Labels Tutorial](https://www.w3.org/WAI/tutorials/forms/labels/). It is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm or a WCAG conformance determination.
 
 ## `link-name-missing`
 
-Reports an `<a>` with an `href` attribute when it has no recognizable accessible name. It accepts non-empty descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. An anchor without `href`, empty or whitespace-only text, and an image with `alt=""` do not supply a link name.
+Reports an `<a>` with an `href` attribute when it has no recognizable accessible name. It accepts non-empty descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported direct-target `aria-labelledby` result, or non-empty `title`. An anchor without `href`, empty or whitespace-only text, and an image with `alt=""` do not supply a link name.
 
 The rule ignores text in `script`, `style`, and `template` descendants. It does not judge whether a link name describes its destination clearly. A direct SVG `<title>` is supported, but SVG `<desc>`, unresolved SVG IDREFs, and browser-only SVG mappings remain ReviewItems rather than asserted missing names. This is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm.
 
@@ -603,7 +603,7 @@ The rule is informed by the [W3C ACT Rule: Links have accessible name](https://w
 
 Reports native `<button>`, `input[type="button"]`, and `input[type="image"]` controls without a recognizable accessible name. It does not inspect custom `role="button"` elements.
 
-For `<button>`, the rule accepts non-empty visible text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported bounded `aria-labelledby` result, or non-empty `title`. For `input[type="button"]`, it accepts non-empty `value`, ARIA naming, or `title`; whitespace-only and empty values do not count. For `input[type="image"]`, it accepts non-empty `alt`, ARIA naming, or `title`. `input[type="submit"]` and `input[type="reset"]` have browser default names and are not reported.
+For `<button>`, the rule accepts non-empty visible text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, a supported direct-target `aria-labelledby` result, or non-empty `title`. For `input[type="button"]`, it accepts non-empty `value`, ARIA naming, or `title`; whitespace-only and empty values do not count. For `input[type="image"]`, it accepts non-empty `alt`, ARIA naming, or `title`. `input[type="submit"]` and `input[type="reset"]` have browser default names and are not reported.
 
 As with the link rule, text in `script`, `style`, and `template` descendants does not name a native button. A direct SVG `<title>` is supported; unresolved SVG sources remain ReviewItems. This is a static name-presence check, not a complete Accessible Name algorithm or a WCAG conformance determination.
 
@@ -617,6 +617,6 @@ The finding says “建议检查标题层级” because this is a structural rev
 
 ## `heading-name-missing`
 
-Reports empty native `h1` through `h6`. It accepts non-empty ordinary descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, or a supported bounded `aria-labelledby` result. Script, style, and template text does not count. As with link and button checks, unresolved SVG naming sources become ReviewItems rather than definite missing-name findings.
+Reports empty native `h1` through `h6`. It accepts non-empty ordinary descendant text, a descendant image with non-empty `alt`, a direct descendant SVG `<title>`, non-empty `aria-label`, or a supported direct-target `aria-labelledby` result. Script, style, and template text does not count. As with link and button checks, unresolved SVG naming sources become ReviewItems rather than definite missing-name findings.
 
 These rules are informed by the [W3C Headings Tutorial](https://www.w3.org/WAI/tutorials/page-structure/headings/). They are focused static checks, not a complete browser Accessible Name algorithm or a WCAG conformance determination.
