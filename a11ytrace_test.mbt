@@ -410,7 +410,7 @@ test "multiple navigation landmarks need distinct static names" {
 }
 
 ///|
-test "svg navigation names are review items and abstract roles are definite findings" {
+test "svg navigation names are review items and concrete role fallback suppresses abstract tokens" {
   let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
     "<nav><svg><title>Menu</title></svg></nav><nav aria-label=\"Primary\"></nav>" +
     "<div role=\"button landmark\"></div><div role=\"\"></div></body></html>"
@@ -429,7 +429,7 @@ test "svg navigation names are review items and abstract roles are definite find
   let abstract_findings = detailed.findings.filter(fn(finding) {
     finding.rule_id == "aria-abstract-role"
   })
-  assert_eq(abstract_findings.length(), 1)
+  assert_eq(abstract_findings.length(), 0)
   let json = @a11ytrace.render_detailed_audit_json(detailed)
   match @json.parse(json) {
     {
@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 62)
+  assert_eq(rules.length(), 65)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -563,6 +563,16 @@ test "rule directory exposes stable metadata and copied rule selections" {
   assert_true(document_ids.contains("meta-refresh-delay"))
   assert_true(@a11ytrace.review_rule_ids().contains("aria-hidden-focus-review"))
   assert_true(@a11ytrace.review_rule_ids().contains("target-size-review"))
+  match @a11ytrace.rule_metadata("role-value-invalid") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::Aria)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("new ARIA metadata must be available")
+  }
 }
 
 ///|
@@ -888,7 +898,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 62)
+  assert_eq(rule_ids.length(), 65)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -901,6 +911,9 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_eq(rule_ids[19], "meta-refresh-delay")
   assert_eq(rule_ids[20], "aria-state-value-invalid")
   assert_eq(rule_ids[21], "button-implicit-submit")
+  assert_true(rule_ids.contains("aria-attribute-undefined"))
+  assert_true(rule_ids.contains("role-value-invalid"))
+  assert_true(rule_ids.contains("table-scope-invalid"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -1947,5 +1960,136 @@ test "reports clickable image map areas without non-empty alt text" {
     }
     Audited(_) => fail("the map fragment should not have parser diagnostics")
     ConfigurationError(_) => fail("known area rule must be accepted")
+  }
+}
+
+///|
+test "accepts WAI-ARIA 1.2 attribute names and reports unsupported aria attributes" {
+  let valid = "<div ARIA-LABEL=\"Name\" aria-description=\"Help\"" +
+    " aria-braillelabel=\"Braille\" aria-brailleroledescription=\"control\"" +
+    " aria-colindextext=\"C\" aria-rowindextext=\"R\"" +
+    " aria-dropeffect=\"move\" aria-grabbed=\"false\"" +
+    " data-aria-future=\"not-aria\"></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(valid, [
+      "aria-attribute-undefined",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("legal WAI-ARIA 1.2 attribute names must not report")
+    ConfigurationError(_) => fail("known ARIA attribute rule must be accepted")
+  }
+  let invalid = "<div aria-future-state=\"x\"></div>" +
+    "<span aria-label=\"Known\" aria-not-defined=\"x\"></span>" +
+    "<template><p aria-template-only=\"x\"></p></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(invalid, [
+      "aria-attribute-undefined",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].element_path, "div:nth-of-type(1)")
+      assert_eq(findings[1].element_path, "span:nth-of-type(1)")
+      for finding in findings {
+        assert_eq(finding.rule_id, "aria-attribute-undefined")
+      }
+    }
+    Audited(_) => fail("unsupported aria-* names outside templates must report")
+    ConfigurationError(_) => fail("known ARIA attribute rule must be accepted")
+  }
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head>" +
+    "<body><div aria-not-real=\"x\"></div></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, ["aria-attribute-undefined"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("the ARIA attribute rule must also apply to documents")
+    ConfigurationError(_) => fail("known ARIA attribute rule must be accepted")
+  }
+}
+
+///|
+test "uses ordered concrete role fallback without duplicate abstract or invalid role reports" {
+  let fragment = "<div role=\"made-up button\"></div>" +
+    "<div role=\"widget checkbox\"></div>" +
+    "<div role=\"widget\"></div>" +
+    "<div role=\"made-up other\"></div>" +
+    "<div role=\"presentation\"></div><div role=\"MADE-UP BUTTON\"></div>"
+  let selected = [
+    "role-value-invalid", "aria-abstract-role", "aria-required-property-missing",
+  ]
+  match @a11ytrace.audit_html_fragment_with_rules(fragment, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(findings[0].element_path, "div:nth-of-type(2)")
+      assert_eq(findings[1].rule_id, "aria-abstract-role")
+      assert_eq(findings[1].element_path, "div:nth-of-type(3)")
+      assert_eq(findings[2].rule_id, "role-value-invalid")
+      assert_eq(findings[2].element_path, "div:nth-of-type(4)")
+    }
+    Audited(_) => fail("role fallback behavior must preserve distinct findings")
+    ConfigurationError(_) => fail("known role rules must be accepted")
+  }
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head>" +
+    "<body><div role=\"unknown-role\"></div></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["role-value-invalid"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("the role value rule must also apply to documents")
+    ConfigurationError(_) => fail("known role rule must be accepted")
+  }
+}
+
+///|
+test "checks only explicit invalid table header scope values" {
+  let valid = "<table><tr><th>Implicit</th><th scope=\"ROW\">Row</th>" +
+    "<th scope=\"colgroup\">Group</th><td scope=\"sideways\">Data</td></tr></table>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(valid, ["table-scope-invalid"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("missing and valid th scope values must not report")
+    ConfigurationError(_) => fail("known table scope rule must be accepted")
+  }
+  let invalid = "<table><tr><th scope=\"sideways\">Bad</th><th scope=\"\">Empty</th>" +
+    "<td headers=\"missing\">Cell</td></tr></table>" +
+    "<template><table><tr><th scope=\"template-only\"></th></tr></table></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(invalid, [
+      "table-scope-invalid", "table-headers-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "table-scope-invalid")
+      assert_eq(findings[1].rule_id, "table-scope-invalid")
+      assert_eq(findings[2].rule_id, "table-headers-invalid")
+    }
+    Audited(_) =>
+      fail("invalid explicit scopes must coexist with table IDREF findings")
+    ConfigurationError(_) => fail("known table rules must be accepted")
+  }
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head>" +
+    "<body><table><tr><th scope=\"diagonal\">Bad</th></tr></table></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["table-scope-invalid"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("the table scope rule must also apply to documents")
+    ConfigurationError(_) => fail("known table scope rule must be accepted")
+  }
+}
+
+///|
+test "new ARIA and table findings survive recoverable parser diagnostics" {
+  let fragment = "<div aria-future-state=\"x\"></div><table><tr>" +
+    "<th scope=\"bad\">Header</th></tr></table></span>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "aria-attribute-undefined", "table-scope-invalid",
+    ]) {
+    Audited(FindingsWithParseErrors(findings, diagnostics)) => {
+      assert_eq(findings.length(), 2)
+      assert_true(diagnostics.length() > 0)
+      assert_eq(findings[0].rule_id, "aria-attribute-undefined")
+      assert_eq(findings[1].rule_id, "table-scope-invalid")
+    }
+    Audited(_) =>
+      fail("recoverable markup must retain new findings and diagnostics")
+    ConfigurationError(_) => fail("known new rules must be accepted")
   }
 }

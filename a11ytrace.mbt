@@ -846,6 +846,33 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
   let wcag = "https://www.w3.org/TR/WCAG22/"
   [
     rule(
+      "aria-attribute-undefined",
+      "Element uses an aria-* attribute not defined by WAI-ARIA 1.2.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      aria,
+      "Checks attribute-name membership only; it does not validate role permission or attribute values.",
+    ),
+    rule(
+      "role-value-invalid",
+      "Role token list has no concrete WAI-ARIA 1.2 fallback role.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      aria,
+      "Uses ordered WAI-ARIA 1.2 concrete-role fallback only; host-language extensions are outside scope.",
+    ),
+    rule(
+      "table-scope-invalid",
+      "Table header has an explicit invalid scope keyword.",
+      Relationships,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://html.spec.whatwg.org/multipage/tables.html#attr-th-scope",
+      "Checks explicit scope on th only; absent scope and header association inference are outside scope.",
+    ),
+    rule(
       "aria-required-property-missing",
       "Selected ARIA role omits a required state or property.",
       Aria,
@@ -2027,6 +2054,24 @@ fn collect_findings(
         has_abstract_role_token(child) {
         findings.push(abstract_role_finding(child, path))
       }
+      if is_rule_enabled(enabled_rule_ids, "aria-attribute-undefined") &&
+        has_undefined_aria_attribute(child) {
+        findings.push(
+          generic_finding(
+            child, path, "aria-attribute-undefined", "This element uses an aria-* attribute not defined by WAI-ARIA 1.2.",
+            "Use a WAI-ARIA 1.2 attribute name, or remove the unsupported aria-* attribute.",
+          ),
+        )
+      }
+      if is_rule_enabled(enabled_rule_ids, "role-value-invalid") &&
+        has_role_value_without_known_fallback(child) {
+        findings.push(
+          generic_finding(
+            child, path, "role-value-invalid", "This role value has no concrete WAI-ARIA 1.2 fallback role.",
+            "Use a concrete WAI-ARIA 1.2 role token, or remove the invalid role attribute.",
+          ),
+        )
+      }
       if is_rule_enabled(enabled_rule_ids, "aria-state-value-invalid") &&
         has_invalid_selected_aria_state(child) {
         findings.push(invalid_aria_state_value_finding(child, path))
@@ -2105,6 +2150,15 @@ fn collect_findings(
         enclosing_table_path is Some(_) &&
         has_invalid_table_headers(child, enclosing_table_path, context) {
         findings.push(invalid_table_headers_finding(child, path))
+      }
+      if is_rule_enabled(enabled_rule_ids, "table-scope-invalid") &&
+        has_invalid_explicit_table_scope(child) {
+        findings.push(
+          generic_finding(
+            child, path, "table-scope-invalid", "This table header has an explicit scope value that is not a valid HTML table scope keyword.",
+            "Use row, col, rowgroup, or colgroup, or omit scope when the default association is appropriate.",
+          ),
+        )
       }
       match heading_level(child) {
         Some(level) => {
@@ -2463,16 +2517,109 @@ fn generic_finding(
 
 ///|
 fn primary_role(node : @dom.Node) -> String? {
-  match node.attrs().get("role") {
-    Some(Some(value)) => {
-      let tokens = idref_tokens(value)
-      if tokens.is_empty() {
-        None
-      } else {
-        Some(tokens[0].to_lower())
-      }
+  for token in role_tokens(node) {
+    if is_concrete_aria_role(token) {
+      return Some(token.to_lower())
     }
-    _ => None
+  }
+  None
+}
+
+///|
+fn role_tokens(node : @dom.Node) -> Array[String] {
+  match node.attrs().get("role") {
+    Some(Some(value)) => idref_tokens(value).map(fn(token) { token.to_lower() })
+    _ => []
+  }
+}
+
+///|
+fn has_role_value_without_known_fallback(node : @dom.Node) -> Bool {
+  let tokens = role_tokens(node)
+  !tokens.is_empty() &&
+  !tokens.any(is_concrete_aria_role) &&
+  !tokens.any(is_abstract_aria_role)
+}
+
+///|
+fn has_undefined_aria_attribute(node : @dom.Node) -> Bool {
+  for name, _ in node.attrs() {
+    let normalized = name.to_lower()
+    if normalized.has_prefix("aria-") && !is_wai_aria_12_attribute(normalized) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn is_wai_aria_12_attribute(name : String) -> Bool {
+  name
+  is ("aria-activedescendant"
+  | "aria-atomic"
+  | "aria-autocomplete"
+  | "aria-braillelabel"
+  | "aria-brailleroledescription"
+  | "aria-busy"
+  | "aria-checked"
+  | "aria-colcount"
+  | "aria-colindex"
+  | "aria-colindextext"
+  | "aria-colspan"
+  | "aria-controls"
+  | "aria-current"
+  | "aria-describedby"
+  | "aria-description"
+  | "aria-details"
+  | "aria-disabled"
+  | "aria-dropeffect"
+  | "aria-errormessage"
+  | "aria-expanded"
+  | "aria-flowto"
+  | "aria-grabbed"
+  | "aria-haspopup"
+  | "aria-hidden"
+  | "aria-invalid"
+  | "aria-keyshortcuts"
+  | "aria-label"
+  | "aria-labelledby"
+  | "aria-level"
+  | "aria-live"
+  | "aria-modal"
+  | "aria-multiline"
+  | "aria-multiselectable"
+  | "aria-orientation"
+  | "aria-owns"
+  | "aria-placeholder"
+  | "aria-posinset"
+  | "aria-pressed"
+  | "aria-readonly"
+  | "aria-relevant"
+  | "aria-required"
+  | "aria-roledescription"
+  | "aria-rowcount"
+  | "aria-rowindex"
+  | "aria-rowindextext"
+  | "aria-rowspan"
+  | "aria-selected"
+  | "aria-setsize"
+  | "aria-sort"
+  | "aria-valuemax"
+  | "aria-valuemin"
+  | "aria-valuenow"
+  | "aria-valuetext")
+}
+
+///|
+fn has_invalid_explicit_table_scope(node : @dom.Node) -> Bool {
+  if node.name() != "th" {
+    return false
+  }
+  match node.attrs().get("scope") {
+    Some(Some(value)) =>
+      !(value.trim().to_lower() is ("row" | "col" | "rowgroup" | "colgroup"))
+    Some(None) => true
+    None => false
   }
 }
 
@@ -2820,10 +2967,8 @@ fn append_static_text_content(node : @dom.Node, output : StringBuilder) -> Unit 
 
 ///|
 fn has_abstract_role_token(node : @dom.Node) -> Bool {
-  match node.attrs().get("role") {
-    Some(Some(value)) => idref_tokens(value).any(is_abstract_aria_role)
-    _ => false
-  }
+  let tokens = role_tokens(node)
+  !tokens.any(is_concrete_aria_role) && tokens.any(is_abstract_aria_role)
 }
 
 ///|
@@ -2841,6 +2986,94 @@ fn is_abstract_aria_role(role : String) -> Bool {
   | "structure"
   | "widget"
   | "window")
+}
+
+///|
+fn is_concrete_aria_role(role : String) -> Bool {
+  role.to_lower()
+  is ("alert"
+  | "alertdialog"
+  | "application"
+  | "article"
+  | "banner"
+  | "blockquote"
+  | "button"
+  | "caption"
+  | "cell"
+  | "checkbox"
+  | "code"
+  | "columnheader"
+  | "combobox"
+  | "complementary"
+  | "contentinfo"
+  | "definition"
+  | "deletion"
+  | "dialog"
+  | "directory"
+  | "document"
+  | "emphasis"
+  | "feed"
+  | "figure"
+  | "form"
+  | "generic"
+  | "grid"
+  | "gridcell"
+  | "group"
+  | "heading"
+  | "img"
+  | "insertion"
+  | "link"
+  | "list"
+  | "listbox"
+  | "listitem"
+  | "log"
+  | "main"
+  | "marquee"
+  | "math"
+  | "menu"
+  | "menubar"
+  | "menuitem"
+  | "menuitemcheckbox"
+  | "menuitemradio"
+  | "meter"
+  | "navigation"
+  | "none"
+  | "note"
+  | "option"
+  | "paragraph"
+  | "presentation"
+  | "progressbar"
+  | "radio"
+  | "radiogroup"
+  | "region"
+  | "row"
+  | "rowgroup"
+  | "rowheader"
+  | "scrollbar"
+  | "search"
+  | "searchbox"
+  | "separator"
+  | "slider"
+  | "spinbutton"
+  | "status"
+  | "strong"
+  | "subscript"
+  | "suggestion"
+  | "superscript"
+  | "switch"
+  | "tab"
+  | "table"
+  | "tablist"
+  | "tabpanel"
+  | "term"
+  | "textbox"
+  | "time"
+  | "timer"
+  | "toolbar"
+  | "tooltip"
+  | "tree"
+  | "treegrid"
+  | "treeitem")
 }
 
 ///|

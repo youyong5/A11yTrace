@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 62 stable IDs include confirmed static findings, structural hints, and
+The 65 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 62
-selectable IDs separately as 32 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 65
+selectable IDs separately as 35 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -49,7 +49,8 @@ image, dialog and alertdialog roles with the same limited static naming
 sources as native-name rules. They do not claim full ARIA role validation or
 browser name computation. `nested-interactive` only flags interactive
 descendants of links or buttons; list rules only inspect direct children;
-`table-header-name-missing` checks static header content, not header scope;
+`table-header-name-missing` checks static header content, while the separate
+`table-scope-invalid` rule checks only explicit invalid `th[scope]` keywords;
 and `viewport-zoom-disabled` is a static resilience hint, not a WCAG verdict.
 
 ## Input scope and shared context
@@ -278,13 +279,58 @@ but the library deliberately reports review rather than claiming the ACT result.
 
 ## `aria-abstract-role`
 
-Reports a non-empty `role` attribute that contains an ARIA 1.2 abstract role
-token: `command`, `composite`, `input`, `landmark`, `range`, `roletype`,
-`section`, `sectionhead`, `select`, `structure`, `widget`, or `window`.
-Empty roles are ignored. This intentionally is not a general role-validity
-rule: it does not reject concrete roles, validate fallback processing, or use
-a partial whitelist to claim other roles are invalid. See the [WAI-ARIA 1.2
-role taxonomy](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
+Reports a non-empty `role` attribute containing an ARIA 1.2 abstract token
+only when its token list has no concrete WAI-ARIA 1.2 fallback. The abstract
+tokens are `command`, `composite`, `input`, `landmark`, `range`, `roletype`,
+`section`, `sectionhead`, `select`, `structure`, `widget`, and `window`.
+Thus `role="widget checkbox"` uses the concrete `checkbox` fallback and is not
+also reported as abstract. Empty roles are ignored. See the [WAI-ARIA 1.2 role
+taxonomy](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
+
+## `aria-attribute-undefined`
+
+Reports an element carrying an `aria-*` attribute name that is not defined by
+[WAI-ARIA 1.2](https://www.w3.org/TR/wai-aria-1.2/#state_prop_values). The
+membership set includes the 1.2 additions such as `aria-description`,
+`aria-braillelabel`, `aria-brailleroledescription`, `aria-colindextext`, and
+`aria-rowindextext`, as well as the still-defined deprecated names
+`aria-dropeffect` and `aria-grabbed`; those names are not falsely reported.
+
+This is an attribute-name check only. It does not decide whether an otherwise
+defined ARIA attribute is permitted for the element's role, whether its value
+is valid, or whether an extension defined by another specification is
+supported. Template contents are not audited. It applies equally to complete
+documents and supplied fragments.
+
+## `role-value-invalid`
+
+Reports a non-empty `role` token list only when no token is a concrete
+WAI-ARIA 1.2 role. It follows ordered fallback behavior: an unknown earlier
+token does not make `role="future-role button"` invalid because `button` is a
+usable fallback. Concrete roles also feed the existing selected ARIA
+name/property checks, so `role="widget checkbox"` is checked as a checkbox.
+
+If a list has no concrete fallback but includes an abstract role, only
+`aria-abstract-role` is emitted, avoiding duplicate and contradictory role
+findings. This intentionally validates the WAI-ARIA 1.2 core role vocabulary
+only; host-language extensions, role permission, required descendants, and
+the browser accessibility-tree mapping are outside scope. See [WAI-ARIA 1.2
+role processing](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
+
+## `table-scope-invalid`
+
+Reports an explicit `scope` attribute on a `<th>` when the trimmed,
+case-insensitive value is not `row`, `col`, `rowgroup`, or `colgroup`. It does
+not report a missing `scope` attribute, and it ignores `scope` placed on a
+`<td>`. The rule applies to documents and fragments and skips inert template
+contents. It is a definite HTML markup-value finding, but not by itself a
+determination that WCAG 1.3.1 fails: HTML assigns an invalid `scope` value the
+Auto state and the resulting association still depends on table context.
+
+The rule does not infer the implicit association algorithm or verify whether a
+`rowgroup` or `colgroup` is contextually anchored; those require fuller table
+structure analysis. It follows the [HTML `th` scope
+keywords](https://html.spec.whatwg.org/multipage/tables.html#attr-th-scope).
 
 ## `img-alt-missing`
 

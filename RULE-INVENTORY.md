@@ -2,7 +2,7 @@
 
 This is the release-review inventory for commit `9b76cb4` and its corrective
 follow-up. It deliberately distinguishes directory metadata from execution:
-there are **62 selectable metadata IDs**, comprising **32 confirmed-finding
+there are **65 selectable metadata IDs**, comprising **35 confirmed-finding
 checks**, **6 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -34,10 +34,13 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | multiple-main | original | static hint | complete document has more than one native main | landmark practice | C/O | body aria hidden and multiple main are document-only findings |
 | navigation-landmark-name-missing | original | static hint | repeated native nav has no static distinguishing name | landmark practice | C/O | multiple navigation landmarks need distinct static names |
 | navigation-landmark-name-duplicate | original | static hint | later repeated native nav name duplicates earlier name | landmark practice | C/O | multiple navigation landmarks need distinct static names |
-| aria-abstract-role | original | confirmed | `role` contains ARIA 1.2 abstract token | 4.1.2 | C/O | abstract role rule covers the complete ARIA 1.2 abstract role set |
+| aria-abstract-role | original | confirmed | no concrete fallback is present and `role` contains an ARIA 1.2 abstract token | 4.1.2 | C/O | abstract role rule covers the complete ARIA 1.2 abstract role set; concrete role fallback suppresses abstract tokens |
 | meta-refresh-delay | original | confirmed | complete-document refresh has supported nonzero numeric delay | 2.2.1 | C/O | reports supported nonzero meta refresh delays in complete documents only |
 | aria-state-value-invalid | original | confirmed | selected documented ARIA state token is invalid | 4.1.2 | C/O | checks only documented ARIA state token types |
 | button-implicit-submit | original | static hint | form button lacks/has empty type | best practice | C/O | suggests explicit button types only for missing or empty form buttons |
+| aria-attribute-undefined | new | confirmed | an `aria-*` attribute name is absent from the WAI-ARIA 1.2 attribute set | 4.1.2 | C/H | accepts WAI-ARIA 1.2 attribute names and reports unsupported aria attributes |
+| role-value-invalid | new | confirmed | non-empty `role` token list has neither a concrete WAI-ARIA 1.2 fallback nor an abstract-role finding | 4.1.2 | C/H | uses ordered concrete role fallback without duplicate abstract or invalid role reports |
+| table-scope-invalid | new | confirmed | `th` has an explicit `scope` other than `row`, `col`, `rowgroup`, or `colgroup` | HTML table conformance practice; not a WCAG verdict | C/H | checks only explicit invalid table header scope values |
 | aria-required-property-missing | new | confirmed | checkbox/switch lacks checked, combobox expanded, or slider valuenow | 4.1.2 | EA/H | selected ARIA required-state rules distinguish missing and valid values |
 | aria-idref-invalid | new | confirmed | selected ARIA local IDREF missing/ambiguous | 4.1.2 | EA/H | extended references and viewport check handle valid tokens and document scope |
 | role-checkbox-name-missing | new | confirmed/review | checkbox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |
