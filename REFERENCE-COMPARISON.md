@@ -60,18 +60,25 @@ npx --yes html-validate@11.16.0 --rule no-dup-id:2 examples/comparison/duplicate
 | `meta-refresh-delay.html` | A11yTrace `meta-refresh-delay` and HTML-Validate `meta-refresh` both report the five-second refresh. | HTML-Validate also diagnoses instant refresh loops and offers a long-delay option; A11yTrace does neither. |
 | `duplicate-id.html` | A11yTrace `duplicate-id` and HTML-Validate `no-dup-id` both report the second `duplicate` ID. | A11yTrace attaches its stable element path and uses the same index to make ARIA references ambiguous; it does not validate ID syntax. |
 | `aria-role-attribute-compatibility.html` | The self-authored custom `role=button`/`aria-autocomplete` and `role=emphasis` naming cases are suitable for comparison with axe-core `aria-allowed-attr` and `aria-prohibited-attr`. | axe-core is broader. A11yTrace checks only its published role/property rows, leaves `aria-checked` to its dedicated compatibility rule, and skips native form controls rather than attempting the full ARIA-in-HTML mapping. |
+| `aria-required-context-role.html` | The self-authored valid tablist/tab and invalid nested tab cases are suitable for comparison with axe-core `aria-required-parent`. | axe-core is broader. A11yTrace implements only its published WAI-ARIA 1.2 table, accepts one unique local `aria-owns` owner, and deliberately skips root/hidden/presentational/ambiguous ownership instead of reconstructing a browser accessibility tree. |
 
 To run that development-only comparison with a ChromeDriver compatible with the
 locally installed Chrome:
 
 ```text
 npx --yes @axe-core/cli@4.11.0 --rules aria-allowed-attr,aria-prohibited-attr examples/comparison/aria-role-attribute-compatibility.html
+npx --yes @axe-core/cli@4.11.0 --rules aria-required-parent file:///absolute/path/to/A11yTrace/examples/comparison/aria-required-context-role.html
 ```
 
-On this checkout the command was attempted on 2026-09-30, but axe-core 4.11.4
-selected ChromeDriver 154 while the installed Chrome was 153.0.8010.53, so no
-axe result is claimed from that run. This tooling mismatch does not affect the
-MoonBit library tests or package and is not added as a dependency.
+The role/property command was attempted on this checkout on 2026-09-30, but
+axe-core 4.11.4 selected ChromeDriver 154 while the installed Chrome was
+153.0.8010.53, so no result is claimed for that fixture. The required-context
+command was run on the same date with the explicit local `file:///` URL: axe
+reported exactly the two intended invalid tab/option cases under
+`aria-required-parent`. Running A11yTrace with only
+`aria-required-context-role` reports those same two elements. The test does
+not establish general equivalence, and axe-core remains a development-only
+tool rather than a build, package, or runtime dependency.
 
 This small comparison demonstrates selected aligned semantics only. It is not a
 claim of equivalent configuration, parser behavior, rule coverage, or output

@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 79)
+  assert_eq(rules.length(), 80)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[21].id, "meta-refresh-delay")
   assert_eq(rules[22].id, "aria-state-value-invalid")
@@ -613,6 +613,20 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("content language metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("aria-required-context-role") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::Aria)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+      assert_eq(
+        rule.reference_url,
+        "https://www.w3.org/TR/wai-aria-1.2/#required-context-role",
+      )
+    }
+    None => fail("required-context metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -988,7 +1002,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 79)
+  assert_eq(rule_ids.length(), 80)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -1018,6 +1032,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("aria-role-attribute-incompatible"))
   assert_true(rule_ids.contains("html-lang-invalid"))
   assert_true(rule_ids.contains("element-lang-invalid"))
+  assert_true(rule_ids.contains("aria-required-context-role"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -3188,5 +3203,159 @@ test "language-tag findings preserve diagnostics document order and JSON" {
     }
     _ =>
       fail("detailed JSON must retain language findings and parser diagnostics")
+  }
+}
+
+///|
+test "required ARIA context accepts modeled DOM and native implicit relationships" {
+  let markup = "<div role=\"tablist\"><div role=\"future-role tab\"></div></div>" +
+    "<div role=\"listbox\"><div role=\"option\"></div></div>" +
+    "<ul><div role=\"listitem\"></div></ul>" +
+    "<div role=\"menu\"><div role=\"menuitemcheckbox\"></div></div>" +
+    "<div role=\"tree\"><div role=\"treeitem\"></div></div>" +
+    "<table><tr role=\"row\"><td role=\"gridcell\"></td></tr></table>" +
+    "<table><tr><td role=\"cell\"></td></tr></table>" +
+    "<div><div role=\"radio\"></div></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(markup, [
+      "aria-required-context-role",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("modeled required contexts and radio exclusion must not report")
+    ConfigurationError(_) => fail("required-context rule must be selectable")
+  }
+}
+
+///|
+test "required ARIA context reports only determinable missing recovered contexts" {
+  let markup = "<div><div role=\"tab\"></div></div>" +
+    "<div><div role=\"option\"></div></div>" +
+    "<div><div role=\"rowheader\"></div></div>" +
+    "<div><div role=\"menuitemradio\"></div></div>" +
+    "<div><div role=\"treeitem\"></div></div>" +
+    "<div><div role=\"listitem\"></div></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(markup, [
+      "aria-required-context-role",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 6)
+      assert_eq(findings[0].rule_id, "aria-required-context-role")
+      assert_true(findings[0].message.contains("tab"))
+      assert_true(findings[5].message.contains("listitem"))
+    }
+    Audited(_) => fail("known missing contexts must report in document order")
+    ConfigurationError(_) => fail("required-context rule must be selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<div role=\"tab\"></div>", [
+      "aria-required-context-role",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("a root-level relationship is intentionally not conclusive")
+    ConfigurationError(_) => fail("required-context rule must be selectable")
+  }
+}
+
+///|
+test "required ARIA context accepts one unique local aria owns owner" {
+  let markup = "<div><div role=\"tablist\" aria-owns=\"owned-tab\"></div>" +
+    "<div id=\"owned-tab\" role=\"tab\"></div>" +
+    "<div role=\"tablist\"><div role=\"group\" aria-owns=\"nested-owned-tab\"></div></div>" +
+    "<div id=\"nested-owned-tab\" role=\"tab\"></div></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(markup, [
+      "aria-required-context-role",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail(
+        "one unique valid aria-owns owner or owner ancestor must supply a context",
+      )
+    ConfigurationError(_) => fail("required-context rule must be selectable")
+  }
+}
+
+///|
+test "required ARIA context leaves ambiguous ownership to IDREF validation" {
+  let markup = "<div><div role=\"tablist\" aria-owns=\"duplicate\"></div>" +
+    "<div id=\"duplicate\" role=\"tab\"></div>" +
+    "<div id=\"duplicate\" role=\"tab\"></div></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(markup, [
+      "aria-required-context-role", "aria-idref-invalid", "duplicate-id",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "aria-idref-invalid")
+      assert_eq(findings[1].rule_id, "duplicate-id")
+    }
+    Audited(_) =>
+      fail(
+        "ambiguous aria-owns must not create a second required-context claim",
+      )
+    ConfigurationError(_) => fail("related rules must be selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<div role=\"tablist\" aria-owns=\"outside-fragment\"></div>",
+      ["aria-required-context-role", "aria-idref-invalid"],
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "aria-idref-invalid")
+    }
+    Audited(_) =>
+      fail("fragment-external ownership is an IDREF issue, not context proof")
+    ConfigurationError(_) => fail("related rules must be selectable")
+  }
+}
+
+///|
+test "required ARIA context skips inert hidden and presentational relationships" {
+  let template = "<template><div><div role=\"tab\"></div></div></template>"
+  let uncertain = "<div aria-hidden=\"true\"><div role=\"tab\"></div></div>" +
+    "<div role=\"presentation\"><div role=\"option\"></div></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(template + uncertain, [
+      "aria-required-context-role",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail(
+        "template, aria-hidden, and presentational relationships are not conclusive",
+      )
+    ConfigurationError(_) => fail("required-context rule must be selectable")
+  }
+}
+
+///|
+test "required ARIA context preserves diagnostics selection and JSON" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<img src=\"missing.png\"><div><div role=\"tab\"></div></div></span>",
+      ["img-alt-missing", "aria-required-context-role"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("required-context rule must audit recoverable markup")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "img-alt-missing")
+  assert_eq(detailed.findings[1].rule_id, "aria-required-context-role")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      "parse_diagnostics": Array([_, ..]),
+      ..
+    } => {
+      assert_eq(first, "img-alt-missing")
+      assert_eq(second, "aria-required-context-role")
+    }
+    _ => fail("JSON must retain required-context findings and diagnostics")
   }
 }

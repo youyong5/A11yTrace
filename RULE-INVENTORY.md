@@ -2,7 +2,7 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **79 selectable metadata IDs**, comprising **48 confirmed-finding
+there are **80 selectable metadata IDs**, comprising **49 confirmed-finding
 checks**, **7 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -51,6 +51,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | aria-required-property-missing | new | confirmed | custom checkbox/switch/radio lacks checked, combobox expanded, slider valuenow, or scrollbar controls/valuenow | 4.1.2 | EA/H | scrollbar required properties distinguish missing values and invalid IDREFs |
 | aria-range-value-invalid | new | confirmed/review | custom effective slider/scrollbar has malformed explicit numeric min/max/now, reversed bounds, or current value outside the explicit/default 0–100 range | 4.1.2 | EA/H | range values accept exact decimals, scientific notation, and default bounds; report malformed values and inconsistent bounds once per element; preserve diagnostics and review unbounded exponents without guessing |
 | aria-idref-invalid | new | confirmed | selected ARIA local IDREF missing/ambiguous | 4.1.2 | EA/H | extended references and viewport check handle valid tokens and document scope |
+| aria-required-context-role | new | confirmed | selected explicit ARIA role has no modeled required-context ancestor or one unique valid local `aria-owns` owner | 4.1.2 partial static evidence | EA/H | required ARIA context accepts modeled DOM and native implicit relationships; required ARIA context leaves ambiguous ownership to IDREF validation |
 | role-checkbox-name-missing | new | confirmed/review | checkbox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |
 | role-combobox-name-missing | new | confirmed/review | combobox role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |
 | role-slider-name-missing | new | confirmed/review | slider role lacks name; SVG source becomes review | 4.1.2 | EA/H | ARIA role-name rules cover author names and conservative role image handling |

@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 79 stable IDs include confirmed static findings, structural hints, and
+The 80 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 79
-selectable IDs separately as 48 confirmed-finding checks, 7 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 80
+selectable IDs separately as 49 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -65,7 +65,8 @@ keeps page requirements from being applied to a standalone component. Use an
 explicit `<!doctype html><html …>` document when page-level checks are wanted.
 
 For every audited DOM, A11yTrace builds one shared context before evaluating
-rules. It indexes non-empty IDs and `label[for]` associations, skipping inert
+rules. It indexes non-empty IDs, `label[for]` associations, and local
+`aria-owns` references, skipping inert
 `template` contents. `aria-labelledby` accepts a whitespace-separated list:
 uniquely resolved targets are processed in source IDREF order. For each direct
 target, the bounded static subset accepts non-empty `aria-label`, ordinary
@@ -544,6 +545,30 @@ The rule does not infer the implicit association algorithm or verify whether a
 `rowgroup` or `colgroup` is contextually anchored; those require fuller table
 structure analysis. It follows the [HTML `th` scope
 keywords](https://html.spec.whatwg.org/multipage/tables.html#attr-th-scope).
+
+## `aria-required-context-role`
+
+Reports a selected valid explicit WAI-ARIA 1.2 role only when the recovered
+static relationship deterministically lacks one of that role's documented
+required contexts. The release models `tab`/`tablist`,
+`option`/`group|listbox`, selected table roles, `listitem`, selected menu-item
+roles, and `treeitem`; the precise table is in
+[ARIA-REQUIRED-CONTEXT-TABLE.md](ARIA-REQUIRED-CONTEXT-TABLE.md). It honors
+ordered concrete role fallback, such as `role="future-role tab"`, and uses a
+small reliable set of native parent semantics (`ul`/`ol`, table sections, and
+`tr`) when those supply a listed context.
+
+One unique, wholly valid local `aria-owns` owner can provide the required
+context directly or through its own modeled ancestor. Missing/duplicate local targets remain `aria-idref-invalid` or
+`duplicate-id` findings instead; this rule does not duplicate them. It also
+does not assert a problem for root-level roles, template content, hidden or
+presentational relationships, unknown owner roles, or ambiguous ownership.
+Fragment references can resolve only inside the supplied fragment. This is not
+a browser accessibility-tree reconstruction: CSS, script mutation, shadow
+DOM, and host-language mappings outside the documented table need browser
+review. The rule follows WAI-ARIA 1.2 [Required Context
+Role](https://www.w3.org/TR/wai-aria-1.2/#required-context-role) and is a
+narrow static 4.1.2 signal, not a full WCAG conclusion.
 
 ## `img-alt-missing`
 

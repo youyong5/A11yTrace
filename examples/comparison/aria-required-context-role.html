@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>ARIA required context comparison</title>
+  </head>
+  <body>
+    <div role="tablist"><button role="tab">Valid tab</button></div>
+    <div><button role="tab">Tab without tablist</button></div>
+
+    <div role="listbox"><div role="option">Valid option</div></div>
+    <div><div role="option">Option without listbox</div></div>
+
+    <div role="tablist" aria-owns="owned-tab"></div>
+    <div id="owned-tab" role="tab">Owned tab</div>
+  </body>
+</html>

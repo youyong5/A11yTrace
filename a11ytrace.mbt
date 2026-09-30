@@ -1382,6 +1382,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "https://www.w3.org/WAI/standards-guidelines/act/rules/html-page-lang-valid-bf051a/",
       "Checks a non-empty static lang value against the generated IANA primary-language set and basic separator shape only; it does not infer the page language or validate later BCP 47 subtags.",
     ),
+    rule(
+      "aria-required-context-role",
+      "Selected ARIA role lacks a modeled required context relationship.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#required-context-role",
+      "Checks only documented tab, option, table, listitem, menu-item, and treeitem context pairs against recovered DOM ancestry or one unique valid local aria-owns owner. Root-level, hidden, presentational, ambiguous, and unmodeled relationships are deliberately skipped because static DOM is not the browser accessibility tree.",
+    ),
   ]
 }
 
@@ -1964,6 +1973,7 @@ priv struct AuditContext {
   id_nodes : Map[String, Array[@dom.Node]]
   id_paths : Map[String, Array[String]]
   id_table_paths : Map[String, Array[String?]]
+  aria_owners_by_id : Map[String, Array[@dom.Node]]
   labels_by_for : Map[String, Array[@dom.Node]]
   page_has_nonempty_title : Bool
   first_page_title_path : String?
@@ -1977,6 +1987,7 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
   let id_nodes : Map[String, Array[@dom.Node]] = Map([])
   let id_paths : Map[String, Array[String]] = Map([])
   let id_table_paths : Map[String, Array[String?]] = Map([])
+  let aria_owners_by_id : Map[String, Array[@dom.Node]] = Map([])
   let labels_by_for : Map[String, Array[@dom.Node]] = Map([])
   let page_titles : Array[(@dom.Node, String)] = []
   let main_paths : Array[String] = []
@@ -1989,6 +2000,7 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
     id_nodes,
     id_paths,
     id_table_paths,
+    aria_owners_by_id,
     labels_by_for,
     page_titles,
     main_paths,
@@ -2011,6 +2023,7 @@ fn build_audit_context(root : @dom.Node, is_document : Bool) -> AuditContext {
     id_nodes,
     id_paths,
     id_table_paths,
+    aria_owners_by_id,
     labels_by_for,
     page_has_nonempty_title,
     first_page_title_path,
@@ -2029,6 +2042,7 @@ fn index_context_children(
   id_nodes : Map[String, Array[@dom.Node]],
   id_paths : Map[String, Array[String]],
   id_table_paths : Map[String, Array[String?]],
+  aria_owners_by_id : Map[String, Array[@dom.Node]],
   labels_by_for : Map[String, Array[@dom.Node]],
   page_titles : Array[(@dom.Node, String)],
   main_paths : Array[String],
@@ -2043,7 +2057,8 @@ fn index_context_children(
       let occurrence = nth_of_type(children, position, name)
       let path = child_path(parent_path, name, occurrence)
       index_context_element(
-        child, path, enclosing_table_path, id_nodes, id_paths, id_table_paths, labels_by_for,
+        child, path, enclosing_table_path, id_nodes, id_paths, id_table_paths, aria_owners_by_id,
+        labels_by_for,
       )
       let child_inside_head = inside_head || name == "head"
       let child_table_path = if name == "table" {
@@ -2065,13 +2080,14 @@ fn index_context_children(
       if name != "template" {
         index_context_children(
           child, path, child_inside_head, child_table_path, id_nodes, id_paths, id_table_paths,
-          labels_by_for, page_titles, main_paths, navigation_nodes,
+          aria_owners_by_id, labels_by_for, page_titles, main_paths, navigation_nodes,
         )
       }
     } else {
       index_context_children(
         child, parent_path, inside_head, enclosing_table_path, id_nodes, id_paths,
-        id_table_paths, labels_by_for, page_titles, main_paths, navigation_nodes,
+        id_table_paths, aria_owners_by_id, labels_by_for, page_titles, main_paths,
+        navigation_nodes,
       )
     }
     position = position + 1
@@ -2086,6 +2102,7 @@ fn index_context_element(
   id_nodes : Map[String, Array[@dom.Node]],
   id_paths : Map[String, Array[String]],
   id_table_paths : Map[String, Array[String?]],
+  aria_owners_by_id : Map[String, Array[@dom.Node]],
   labels_by_for : Map[String, Array[@dom.Node]],
 ) -> Unit {
   match node.attrs().get("id") {
@@ -2100,6 +2117,15 @@ fn index_context_element(
     match node.attrs().get("for") {
       Some(Some(id)) if !id.trim().is_empty() =>
         append_index_node(labels_by_for, id, node)
+      _ => ()
+    }
+  }
+  if node.name() != "template" {
+    match node.attrs().get("aria-owns") {
+      Some(Some(value)) =>
+        for id in idref_tokens(value) {
+          append_index_node(aria_owners_by_id, id, node)
+        }
       _ => ()
     }
   }
@@ -2457,6 +2483,17 @@ fn collect_extended_aria_findings(
         "Reference a unique non-empty ID in the same audited document or fragment.",
       ),
     )
+  }
+  if is_rule_enabled(enabled, "aria-required-context-role") {
+    match missing_required_context_role_message(node, context) {
+      Some(message) =>
+        findings.push(
+          generic_finding(
+            node, path, "aria-required-context-role", message, "Place this role in one of its documented required contexts, or use one unique valid aria-owns relationship; verify the browser accessibility tree.",
+          ),
+        )
+      None => ()
+    }
   }
   let role = primary_role(node)
   if role is Some(role_name) {
@@ -3492,6 +3529,232 @@ fn has_invalid_selected_aria_idref(
   has_invalid_single_id_reference(node, "aria-details", context) ||
   has_invalid_idref_list(node, "aria-controls", context) ||
   has_invalid_idref_list(node, "aria-owns", context)
+}
+
+///|
+fn missing_required_context_role_message(
+  node : @dom.Node,
+  context : AuditContext,
+) -> String? {
+  // This is intentionally narrower than a browser accessibility-tree check.
+  // A root-level role, an aria-hidden/presentational relationship, or an
+  // ambiguous aria-owns graph can all have semantics that static DOM ancestry
+  // cannot establish reliably, so they are left to browser review.
+  match primary_role(node) {
+    Some(child_role) if is_modeled_required_context_role(child_role) =>
+      if has_uncertain_required_context_semantics(node) ||
+        !has_element_parent(node) ||
+        has_allowed_dom_required_context(node, child_role) ||
+        has_allowed_owned_required_context(node, child_role, context) ||
+        has_ambiguous_aria_owns_relationship(node, context) {
+        None
+      } else {
+        Some(
+          "This " +
+          child_role +
+          " role has no modeled required context role in the recovered static relationship.",
+        )
+      }
+    _ => None
+  }
+}
+
+///|
+fn is_modeled_required_context_role(role : String) -> Bool {
+  role
+  is ("cell"
+  | "columnheader"
+  | "gridcell"
+  | "listitem"
+  | "menuitem"
+  | "menuitemcheckbox"
+  | "menuitemradio"
+  | "option"
+  | "row"
+  | "rowheader"
+  | "tab"
+  | "treeitem")
+}
+
+///|
+fn required_context_allows_child(
+  context_role : String,
+  child_role : String,
+) -> Bool {
+  match child_role {
+    "cell" | "columnheader" | "gridcell" | "rowheader" => context_role == "row"
+    "listitem" => context_role is ("directory" | "list")
+    "menuitem" | "menuitemcheckbox" | "menuitemradio" =>
+      context_role is ("group" | "menu" | "menubar")
+    "option" => context_role is ("group" | "listbox")
+    "row" => context_role is ("grid" | "rowgroup" | "table" | "treegrid")
+    "tab" => context_role == "tablist"
+    "treeitem" => context_role is ("group" | "tree")
+    _ => false
+  }
+}
+
+///|
+fn has_element_parent(node : @dom.Node) -> Bool {
+  match node.parent() {
+    Some(parent) => parent.kind() is @dom.Element
+    None => false
+  }
+}
+
+///|
+fn has_allowed_dom_required_context(
+  node : @dom.Node,
+  child_role : String,
+) -> Bool {
+  let mut ancestor = node.parent()
+  while ancestor is Some(parent) {
+    match effective_context_role(parent) {
+      Some(context_role) if required_context_allows_child(
+          context_role, child_role,
+        ) => return true
+      _ => ()
+    }
+    ancestor = parent.parent()
+  }
+  false
+}
+
+///|
+fn has_allowed_owned_required_context(
+  node : @dom.Node,
+  child_role : String,
+  context : AuditContext,
+) -> Bool {
+  match unique_valid_aria_owns_owner(node, context) {
+    Some(owner) =>
+      match effective_context_role(owner) {
+        Some(owner_role) =>
+          required_context_allows_child(owner_role, child_role) ||
+          has_allowed_dom_required_context(owner, child_role)
+        None => false
+      }
+    None => false
+  }
+}
+
+///|
+fn has_ambiguous_aria_owns_relationship(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  match node.attrs().get("id") {
+    Some(Some(id)) if !id.trim().is_empty() =>
+      match context.aria_owners_by_id.get(id) {
+        Some([owner]) =>
+          !has_unique_id_target(context, id) ||
+          !has_only_unique_valid_aria_owns_targets(owner, context) ||
+          owner_is_aria_owns_self_reference(owner, id) ||
+          has_uncertain_required_context_semantics(owner) ||
+          effective_context_role(owner) is None
+        Some(_) => true
+        None => false
+      }
+    _ => false
+  }
+}
+
+///|
+fn unique_valid_aria_owns_owner(
+  node : @dom.Node,
+  context : AuditContext,
+) -> @dom.Node? {
+  match node.attrs().get("id") {
+    Some(Some(id)) if !id.trim().is_empty() =>
+      match context.aria_owners_by_id.get(id) {
+        Some([owner]) if has_unique_id_target(context, id) &&
+          has_only_unique_valid_aria_owns_targets(owner, context) &&
+          !owner_is_aria_owns_self_reference(owner, id) &&
+          !has_uncertain_required_context_semantics(owner) &&
+          effective_context_role(owner) is Some(_) => Some(owner)
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
+fn has_only_unique_valid_aria_owns_targets(
+  owner : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  match owner.attrs().get("aria-owns") {
+    Some(Some(value)) => {
+      let ids = idref_tokens(value)
+      !ids.is_empty() &&
+      ids.all(fn(id) { has_unique_id_target(context, id) }) &&
+      !has_duplicate_idref_token(ids)
+    }
+    _ => false
+  }
+}
+
+///|
+fn has_duplicate_idref_token(ids : Array[String]) -> Bool {
+  let mut index = 0
+  while index < ids.length() {
+    let mut later = index + 1
+    while later < ids.length() {
+      if ids[index] == ids[later] {
+        return true
+      }
+      later = later + 1
+    }
+    index = index + 1
+  }
+  false
+}
+
+///|
+fn owner_is_aria_owns_self_reference(
+  owner : @dom.Node,
+  owned_id : String,
+) -> Bool {
+  match owner.attrs().get("id") {
+    Some(Some(owner_id)) => owner_id == owned_id
+    _ => false
+  }
+}
+
+///|
+fn has_uncertain_required_context_semantics(node : @dom.Node) -> Bool {
+  let mut current = Some(node)
+  while current is Some(element) {
+    if has_aria_hidden_true(element) || is_presentational_context_role(element) {
+      return true
+    }
+    current = element.parent()
+  }
+  false
+}
+
+///|
+fn is_presentational_context_role(node : @dom.Node) -> Bool {
+  primary_role(node) is Some(role) && role is ("none" | "presentation")
+}
+
+///|
+fn effective_context_role(node : @dom.Node) -> String? {
+  match node.attrs().get("role") {
+    Some(_) => primary_role(node)
+    None => implicit_context_role(node)
+  }
+}
+
+///|
+fn implicit_context_role(node : @dom.Node) -> String? {
+  match node.name() {
+    "ol" | "ul" => Some("list")
+    "table" => Some("table")
+    "tbody" | "tfoot" | "thead" => Some("rowgroup")
+    "tr" => Some("row")
+    _ => None
+  }
 }
 
 ///|
