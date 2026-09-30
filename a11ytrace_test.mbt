@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 67)
+  assert_eq(rules.length(), 68)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -582,6 +582,16 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("custom role name metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("role-radio-name-missing") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::ContentName)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("custom radio name metadata must be available")
   }
 }
 
@@ -908,7 +918,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 67)
+  assert_eq(rule_ids.length(), 68)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -926,6 +936,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("table-scope-invalid"))
   assert_true(rule_ids.contains("role-button-name-missing"))
   assert_true(rule_ids.contains("role-link-name-missing"))
+  assert_true(rule_ids.contains("role-radio-name-missing"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2235,6 +2246,99 @@ test "custom role name checks run for documents and not native name-rule targets
       )
     ConfigurationError(_) =>
       fail("known custom role name rules must be accepted")
+  }
+}
+
+///|
+test "custom radio roles accept names and report empty effective roles" {
+  let selected = ["role-radio-name-missing"]
+  let named = "<span id=\"shared\" aria-label=\"Shared name\"></span>" +
+    "<div role=\"radio\">Option</div>" +
+    "<div role=\"radio\"><img src=\"option.svg\" alt=\"Option image\"></div>" +
+    "<div role=\"radio\" aria-labelledby=\"shared\"></div>" +
+    "<div role=\"future-role radio\" aria-label=\"Fallback role\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(named, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("supported custom-radio name sources must not report")
+    ConfigurationError(_) => fail("the custom radio rule must be selectable")
+  }
+  let missing = "<div role=\"radio\"> </div>" +
+    "<div role=\"radio\"><img src=\"decorative.svg\" alt=\"\"></div>" +
+    "<div role=\"future-role radio\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(missing, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "role-radio-name-missing")
+      assert_eq(findings[1].rule_id, "role-radio-name-missing")
+      assert_eq(findings[2].rule_id, "role-radio-name-missing")
+    }
+    Audited(_) =>
+      fail("empty and decorative-image-only custom radios must report")
+    ConfigurationError(_) => fail("the custom radio rule must be selectable")
+  }
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head>" +
+    "<body><div role=\"radio\"></div></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "role-radio-name-missing")
+    }
+    Audited(_) => fail("the custom radio rule must also run for documents")
+    ConfigurationError(_) => fail("the custom radio rule must be selectable")
+  }
+}
+
+///|
+test "custom radio checks keep native controls separate and preserve JSON reviews" {
+  let fragment = "<input type=\"radio\"><input type=\"radio\" role=\"radio\">" +
+    "<div role=\"radio\"><svg></svg></div>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "form-control-name-missing", "role-radio-name-missing",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known native and custom radio name rules must audit")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "form-control-name-missing")
+  assert_eq(detailed.findings[1].rule_id, "form-control-name-missing")
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "role-radio-name-missing")
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      "review_items": Array([{ "rule_id": String(review), .. }]),
+      ..
+    } => {
+      assert_eq(first, "form-control-name-missing")
+      assert_eq(second, "form-control-name-missing")
+      assert_eq(review, "role-radio-name-missing")
+    }
+    _ =>
+      fail("detailed JSON must retain native findings and custom-radio reviews")
+  }
+}
+
+///|
+test "radio required state and values distinguish custom and native markup" {
+  let selected = ["aria-required-property-missing", "aria-state-value-invalid"]
+  let markup = "<div role=\"radio\"></div>" +
+    "<div role=\"radio\" aria-checked=\"mixed\"></div>" +
+    "<div role=\"radio\" aria-checked=\"true\"></div>" +
+    "<div role=\"radio\" aria-checked=\"false\"></div>" +
+    "<div role=\"future-role radio\" aria-checked=\"true\"></div>" +
+    "<input type=\"radio\"><input type=\"radio\" role=\"radio\">"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(findings[1].rule_id, "aria-state-value-invalid")
+    }
+    Audited(_) =>
+      fail("radio state checks must distinguish missing and invalid values")
+    ConfigurationError(_) => fail("known radio state rules must be selectable")
   }
 }
 

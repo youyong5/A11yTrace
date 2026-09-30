@@ -6,11 +6,11 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 The published package is `youyong5/a11ytrace@0.2.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
 
-## 0.2.0 release
+## Current development checkout
 
-This checkout has 67 selectable built-in IDs: 37 confirmed Finding checks, 6
+This checkout has 68 selectable built-in IDs: 38 confirmed Finding checks, 6
 static hints, and 24 ReviewItem triggers. These are distinct result classes,
-not 67 automatic WCAG checks. Its public WCAG directory records the 55 current
+not 68 automatic WCAG checks. Its public WCAG directory records the 55 current
 WCAG 2.2 A/AA success criteria and one historical WCAG 2.1 entry (4.1.1,
 removed in 2.2): 9 criteria have narrow partial automatic checks, 33 have
 specific manual-review procedures, and 13 are not assessed from static HTML.
@@ -40,6 +40,6 @@ Run the in-module consumer example from the repository root:
 moon run --target native examples/consumer
 ```
 
-The 67 built-in rules cover image/text alternatives; native and selected ARIA widget names including custom button/link roles; document and landmark structure; ID/label/table relationships; WAI-ARIA 1.2 attribute names, concrete-role fallback, selected values and required properties; and clear static media, keyboard, focus, target-size, dragging, form and authentication review triggers. `aria-attribute-undefined`, `role-value-invalid`, and `table-scope-invalid` are narrow static checks; they do not make this library a complete ARIA or table-association validator. Shared `aria-labelledby` parsing preserves IDREF order and accepts a direct target's supported static ARIA-label/text-image-alt/title source, but does not recursively implement the browser's full accessible-name traversal. Potential focusable content in `aria-hidden` subtrees is a manual-review result, not an asserted rendered violation. The checks are deliberately scoped, not a complete Accessible Name implementation, ARIA validator, or WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
+The 68 built-in rules cover image/text alternatives; native and selected ARIA widget names including custom button/link/radio roles; document and landmark structure; ID/label/table relationships; WAI-ARIA 1.2 attribute names, concrete-role fallback, selected values and required properties; and clear static media, keyboard, focus, target-size, dragging, form and authentication review triggers. `aria-attribute-undefined`, `role-value-invalid`, and `table-scope-invalid` are narrow static checks; they do not make this library a complete ARIA or table-association validator. Shared `aria-labelledby` parsing preserves IDREF order and accepts a direct target's supported static ARIA-label/text-image-alt/title source, but does not recursively implement the browser's full accessible-name traversal. Potential focusable content in `aria-hidden` subtrees is a manual-review result, not an asserted rendered violation. The checks are deliberately scoped, not a complete Accessible Name implementation, ARIA validator, or WCAG conformance decision. Fragment references are resolved only inside the supplied markup. The optional CLI currently has error paths that exit with status 0, so CI integrations should consume the library's structured results instead.
 
-See [README.mbt.md](README.mbt.md) for full MoonBit examples, JSON fields, rules, and the native CLI; [RULES.md](RULES.md) for rule boundaries; [RULE-INVENTORY.md](RULE-INVENTORY.md) for the 67-ID execution/test inventory; [WCAG-COVERAGE.md](WCAG-COVERAGE.md) for the A/AA coverage directory and review steps; and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped HTML-Validate/axe-core/ACT comparison and static-analysis limits.
+See [README.mbt.md](README.mbt.md) for full MoonBit examples, JSON fields, rules, and the native CLI; [RULES.md](RULES.md) for rule boundaries; [RULE-INVENTORY.md](RULE-INVENTORY.md) for the 68-ID execution/test inventory; [WCAG-COVERAGE.md](WCAG-COVERAGE.md) for the A/AA coverage directory and review steps; and [REFERENCE-COMPARISON.md](REFERENCE-COMPARISON.md) for the scoped HTML-Validate/axe-core/ACT comparison and static-analysis limits.

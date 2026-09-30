@@ -891,6 +891,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "Checks effective role=link only when no native button, link, or form-control name rule already applies; SVG-only cases become review items.",
     ),
     rule(
+      "role-radio-name-missing",
+      "Custom radio role lacks a supported static name.",
+      ContentName,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      aria,
+      "Checks effective role=radio only when no native form-control name rule already applies; SVG-only cases become review items.",
+    ),
+    rule(
       "aria-required-property-missing",
       "Selected ARIA role omits a required state or property.",
       Aria,
@@ -2676,6 +2685,7 @@ fn custom_role_name_rule_id(role : String) -> String? {
   match role {
     "button" => Some("role-button-name-missing")
     "link" => Some("role-link-name-missing")
+    "radio" => Some("role-radio-name-missing")
     _ => None
   }
 }
@@ -2718,10 +2728,17 @@ fn has_missing_selected_required_aria_property(node : @dom.Node) -> Bool {
   match primary_role(node) {
     Some("checkbox") | Some("switch") =>
       node.attrs().get("aria-checked") is None
+    Some("radio") =>
+      !is_native_radio_input(node) && node.attrs().get("aria-checked") is None
     Some("combobox") => node.attrs().get("aria-expanded") is None
     Some("slider") => node.attrs().get("aria-valuenow") is None
     _ => false
   }
+}
+
+///|
+fn is_native_radio_input(node : @dom.Node) -> Bool {
+  node.name() == "input" && input_type(node) == "radio"
 }
 
 ///|
@@ -3206,10 +3223,18 @@ fn has_invalid_selected_aria_state(node : @dom.Node) -> Bool {
   has_invalid_aria_token(node, "aria-multiselectable", is_true_false) ||
   has_invalid_aria_token(node, "aria-readonly", is_true_false) ||
   has_invalid_aria_token(node, "aria-required", is_true_false) ||
-  has_invalid_aria_token(node, "aria-checked", is_tristate) ||
+  has_invalid_aria_checked_value(node) ||
   has_invalid_aria_token(node, "aria-pressed", is_tristate) ||
   has_invalid_aria_token(node, "aria-current", is_current_token) ||
   has_invalid_aria_token(node, "aria-invalid", is_invalid_token)
+}
+
+///|
+fn has_invalid_aria_checked_value(node : @dom.Node) -> Bool {
+  match primary_role(node) {
+    Some("radio") => has_invalid_aria_token(node, "aria-checked", is_true_false)
+    _ => has_invalid_aria_token(node, "aria-checked", is_tristate)
+  }
 }
 
 ///|

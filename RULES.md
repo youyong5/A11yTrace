@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 67 stable IDs include confirmed static findings, structural hints, and
+The 68 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,17 +34,17 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 67
-selectable IDs separately as 37 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 68
+selectable IDs separately as 38 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
 
 New narrow static rules are intentionally bounded: selected ARIA required
-property checks cover checkbox/switch `aria-checked`, combobox
+property checks cover custom checkbox/switch/radio `aria-checked`, combobox
 `aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover
 `aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
-The role-name checks cover custom button/link, checkbox, combobox, slider,
+The role-name checks cover custom button/link/radio, checkbox, combobox, slider,
 progressbar, meter, image, dialog and alertdialog roles with the same limited static naming
 sources as native-name rules. They do not claim full ARIA role validation or
 browser name computation. `nested-interactive` only flags interactive
@@ -221,7 +221,8 @@ explicitly supported set is invalid after trimming and ASCII case folding:
 - Boolean: `aria-busy`, `aria-disabled`, `aria-modal`,
   `aria-multiline`, `aria-multiselectable`, `aria-readonly`, `aria-required`.
 - True/false/undefined: `aria-expanded`, `aria-hidden`.
-- Tristate: `aria-checked`, `aria-pressed`.
+- Tristate: `aria-checked` (except effective `role="radio"`, which permits
+  only `true` or `false`), `aria-pressed`.
 - Token sets: `aria-current` (`false`, `true`, `page`, `step`, `location`,
   `date`, `time`) and `aria-invalid` (`false`, `true`, `grammar`, `spelling`).
 
@@ -323,14 +324,14 @@ only; host-language extensions, role permission, required descendants, and
 the browser accessibility-tree mapping are outside scope. See [WAI-ARIA 1.2
 role processing](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
 
-## `role-button-name-missing` and `role-link-name-missing`
+## `role-button-name-missing`, `role-link-name-missing`, and `role-radio-name-missing`
 
-Report an effective custom `role="button"` or `role="link"` without a
+Report an effective custom `role="button"`, `role="link"`, or `role="radio"` without a
 supported static name. They accept non-empty descendant text, descendant image
 `alt`, resolvable `aria-labelledby`, non-empty `aria-label`, and fallback
 `title`. Whitespace-only content and `img[alt=""]` do not supply a name. The
 effective role follows the same ordered concrete-role fallback as the rest of
-the library, so `role="future-role button"` is checked as a button.
+the library, so `role="future-role radio"` is checked as a radio.
 
 Native buttons, `<a href>`, and the selected native form controls are excluded
 because their established name rules already own those elements; one element
@@ -340,6 +341,23 @@ Finding because SVG/browser name sources are not reliably computed. This is a
 bounded static presence check informed by [Accessible Name and Description
 Computation 1.2](https://www.w3.org/TR/accname-1.2/), not a complete browser
 AccName implementation or WCAG conformance conclusion.
+
+## `aria-required-property-missing` and `aria-state-value-invalid`
+
+`aria-required-property-missing` checks only selected effective custom roles:
+`checkbox`, `switch`, and `radio` require `aria-checked`; `combobox` requires
+`aria-expanded`; and `slider` requires `aria-valuenow`. A native
+`<input type="radio">` is not reported merely because it uses its HTML checked
+state instead of an ARIA attribute, including when it redundantly carries
+`role="radio"`.
+
+`aria-state-value-invalid` validates the listed static state tokens and emits
+at most one state-value Finding for an element. `aria-checked="mixed"` is
+accepted for the general tristate cases already supported by this bounded rule,
+but it is invalid for an effective `role="radio"`; only `true` and `false` are
+accepted there. These are static markup checks: they do not verify a radio
+group's keyboard behavior, mutual exclusion, or browser accessibility-tree
+state. See [WAI-ARIA 1.2 radio](https://www.w3.org/TR/wai-aria-1.2/#radio).
 
 ## `table-scope-invalid`
 
