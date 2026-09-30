@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Image text-alternative comparison</title>
+  </head>
+  <body>
+    <img src="chart.png" alt="Monthly sales chart">
+    <img src="border.png" alt="">
+    <img src="whitespace.png" alt=" ">
+    <img src="missing.png">
+    <img src="labelled.png" aria-label="Company logo">
+    <span id="report-label">Monthly report</span>
+    <img src="referenced.png" aria-labelledby="report-label">
+    <img src="title.png" title="Settings icon">
+    <img src="presentational.png" role="presentation">
+    <img src="role-image.png" role="img" alt="">
+    <img src="focusable.png" role="none" tabindex="0">
+    <img src="stateful.png" role="none" alt="" aria-checked="true">
+    <div aria-hidden="true"><img src="hidden.png"></div>
+  </body>
+</html>

@@ -21,7 +21,7 @@ is never included as a current WCAG 2.2 requirement.
 
 | SC | Level | 2.1 / 2.2 | Status | A11yTrace rules or review procedure |
 | --- | --- | --- | --- | --- |
-| 1.1.1 Non-text Content | A | both | Partial automatic | `img-alt-missing`, `area-alt-missing`; review purpose and alternative quality. |
+| 1.1.1 Non-text Content | A | both | Partial automatic | `img-alt-missing`, `img-text-alternative-missing`, `area-alt-missing`; review image purpose and whether any alternative serves that purpose. |
 | 1.2.1–1.2.5 Time-based Media | A/AA | both | Manual review | For each audio/video asset, play it; verify alternatives, captions and audio description. |
 | 1.3.1 Info and Relationships | A | both | Partial automatic | Table/header and heading checks; review all visual relationships. |
 | 1.3.2 Meaningful Sequence | A | both | Manual review | `meaningful-sequence-review`; compare DOM and rendered order. |

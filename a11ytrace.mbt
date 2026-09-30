@@ -669,6 +669,15 @@ fn rule_catalog() -> Array[RuleMetadata] {
       boundary: "Checks alt presence, not image purpose or alternative-text quality.",
     },
     {
+      id: "img-text-alternative-missing",
+      summary: "Image lacks a supported static text alternative.",
+      category: ContentName,
+      scope: DocumentOrFragment,
+      result_kind: ConfirmedFinding,
+      reference_url: "https://www.w3.org/WAI/standards-guidelines/act/rules/23a2a8/",
+      boundary: "Distinguishes selected static names and decorative markup; image purpose, browser mappings, and alternative quality remain outside scope.",
+    },
+    {
       id: "form-control-name-missing",
       summary: "Input control lacks a supported static name.",
       category: ContentName,
@@ -1439,7 +1448,7 @@ fn wcag_criteria_catalog() -> Array[WcagCriterion] {
       A,
       true,
       PartialAutomatic,
-      ["img-alt-missing", "area-alt-missing"],
+      ["img-alt-missing", "img-text-alternative-missing", "area-alt-missing"],
       "Review image purpose and alternative-text quality with subject-matter context.",
     ),
     wcag_entry(
@@ -2299,10 +2308,31 @@ fn collect_findings(
         path == title_path {
         findings.push(missing_document_title_finding(child, path))
       }
-      if is_rule_enabled(enabled_rule_ids, "img-alt-missing") &&
-        name == "img" &&
-        child.attrs().get("alt") is None {
-        findings.push(missing_alt_finding(child, path))
+      if name == "img" {
+        let image_result = image_text_alternative_result(
+          child, context, hidden_by_aria,
+        )
+        let semantic_image_rule_enabled = is_rule_enabled(
+          enabled_rule_ids, "img-text-alternative-missing",
+        )
+        if is_rule_enabled(enabled_rule_ids, "img-alt-missing") &&
+          child.attrs().get("alt") is None {
+          findings.push(missing_alt_finding(child, path))
+        }
+        if semantic_image_rule_enabled {
+          match image_result {
+            ImageAlternativeMissing =>
+              if !(is_rule_enabled(enabled_rule_ids, "img-alt-missing") &&
+                child.attrs().get("alt") is None) {
+                findings.push(
+                  missing_image_text_alternative_finding(child, path),
+                )
+              }
+            ImageAlternativeUncertain =>
+              review_items.push(image_text_alternative_review_item(child, path))
+            ImageAlternativeConfirmed | ImageDecorativeConfirmed => ()
+          }
+        }
       }
       if is_rule_enabled(enabled_rule_ids, "duplicate-id") &&
         is_later_duplicate_id(child, path, context) {
@@ -2547,7 +2577,9 @@ fn collect_extended_aria_findings(
       }
     }
     let name_rule = role_name_rule_id(role_name)
-    if name_rule is Some(rule_id) && is_rule_enabled(enabled, rule_id) {
+    if name_rule is Some(rule_id) &&
+      !(node.name() == "img" && role_name == "img") &&
+      is_rule_enabled(enabled, rule_id) {
       match role_static_name_result(node, role_name, context) {
         NameConfirmed(_) => ()
         NameUncertain =>
@@ -3084,6 +3116,14 @@ priv enum StaticNameResult {
 }
 
 ///|
+priv enum ImageTextAlternativeResult {
+  ImageAlternativeConfirmed
+  ImageDecorativeConfirmed
+  ImageAlternativeMissing
+  ImageAlternativeUncertain
+}
+
+///|
 fn generic_static_name_result(
   node : @dom.Node,
   context : AuditContext,
@@ -3102,6 +3142,117 @@ fn generic_static_name_result(
           }
       }
   }
+}
+
+///|
+fn image_text_alternative_result(
+  image : @dom.Node,
+  context : AuditContext,
+  hidden_by_aria : Bool,
+) -> ImageTextAlternativeResult {
+  // aria-hidden removes the supplied image from the static accessibility-tree
+  // input. Whether hiding it is appropriate for its purpose is a human review.
+  if hidden_by_aria {
+    return ImageDecorativeConfirmed
+  }
+  match primary_role(image) {
+    Some("none") | Some("presentation") =>
+      if presentation_role_applies_to_image(image) {
+        ImageDecorativeConfirmed
+      } else {
+        image_name_result_to_text_alternative(
+          image_static_name_result(image, context),
+        )
+      }
+    Some("img") =>
+      image_name_result_to_text_alternative(
+        image_static_name_result(image, context),
+      )
+    Some(_) =>
+      // A non-image explicit role changes the host-language mapping. This
+      // image-specific rule does not reconstruct that browser mapping; any
+      // dedicated role-name rule remains responsible for its own role.
+      match image_static_name_result(image, context) {
+        NameConfirmed(_) => ImageAlternativeConfirmed
+        NameMissing | NameUncertain => ImageAlternativeUncertain
+      }
+    None =>
+      if !role_tokens(image).is_empty() {
+        // An unknown or abstract role has no modeled image mapping.
+        match image_static_name_result(image, context) {
+          NameConfirmed(_) => ImageAlternativeConfirmed
+          NameMissing | NameUncertain => ImageAlternativeUncertain
+        }
+      } else {
+        match image_static_name_result(image, context) {
+          NameConfirmed(_) => ImageAlternativeConfirmed
+          NameUncertain => ImageAlternativeUncertain
+          NameMissing =>
+            if has_explicit_empty_alt(image) {
+              ImageDecorativeConfirmed
+            } else {
+              ImageAlternativeMissing
+            }
+        }
+      }
+  }
+}
+
+///|
+fn image_name_result_to_text_alternative(
+  name : StaticNameResult,
+) -> ImageTextAlternativeResult {
+  match name {
+    NameConfirmed(_) => ImageAlternativeConfirmed
+    NameMissing => ImageAlternativeMissing
+    NameUncertain => ImageAlternativeUncertain
+  }
+}
+
+///|
+fn image_static_name_result(
+  image : @dom.Node,
+  context : AuditContext,
+) -> StaticNameResult {
+  match static_name_result_from_labelledby(image, context) {
+    NameConfirmed(name) => NameConfirmed(name)
+    NameUncertain => NameUncertain
+    NameMissing =>
+      match nonempty_attribute_name(image, "aria-label") {
+        Some(name) => NameConfirmed(name)
+        None =>
+          match nonempty_attribute_name(image, "alt") {
+            Some(name) => NameConfirmed(name)
+            None => attribute_name_or_missing(image, "title")
+          }
+      }
+  }
+}
+
+///|
+fn has_explicit_empty_alt(image : @dom.Node) -> Bool {
+  match image.attrs().get("alt") {
+    // ACT 23a2a8 distinguishes the empty string from whitespace: alt=" "
+    // has an empty computed name but does not mark an image decorative.
+    Some(Some(value)) => value == ""
+    Some(None) => true
+    None => false
+  }
+}
+
+///|
+fn presentation_role_applies_to_image(image : @dom.Node) -> Bool {
+  if is_potentially_focusable(image) {
+    return false
+  }
+  // Global ARIA states/properties can cause a presentational role to be
+  // ignored. A static attribute is enough to avoid asserting decoration.
+  for name, _ in image.attrs() {
+    if name.to_lower().has_prefix("aria-") {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -5180,6 +5331,35 @@ fn missing_alt_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "img-alt-missing",
     message: "This image has no alt attribute.",
     suggestion: "Add an alt attribute; use alt=\"\" only when the image is decorative.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn missing_image_text_alternative_finding(
+  node : @dom.Node,
+  path : String,
+) -> Finding {
+  {
+    rule_id: "img-text-alternative-missing",
+    message: "This image has no supported static text alternative and is not marked decorative.",
+    suggestion: "Provide a non-empty alt or supported ARIA/title name, or use alt=\"\" or presentational markup only for a decorative image.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn image_text_alternative_review_item(
+  node : @dom.Node,
+  path : String,
+) -> ReviewItem {
+  {
+    rule_id: "img-text-alternative-missing",
+    reason: "This image has an explicit role whose browser accessibility mapping is outside the supported static subset; verify its text alternative in a browser.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

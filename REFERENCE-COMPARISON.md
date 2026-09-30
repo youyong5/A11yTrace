@@ -25,6 +25,7 @@ parsing, but does not copy the source code of any auditing tool.
 | Detailed static result categories | Supported | Detailed APIs keep definite findings and parser diagnostics separate from explicit browser/CSS review items. |
 | HTML-Validate's broad HTML syntax, content-model, metadata, and framework support | Not supported | A11yTrace is not an HTML conformance validator. |
 | Accessible names for native controls, links, buttons, headings, iframes, and linked areas | Partially supported | It checks selected static sources, including direct SVG `<title>`, only; it does not implement the full browser Accessible Name algorithm. |
+| Image text alternatives | Partially supported | A dedicated `<img>` check distinguishes selected static names, explicit decoration/exclusion, static missing alternatives, and unmodeled-role review. It does not judge image purpose or alternative quality. |
 | ID and label/IDREF resolution | Partially supported | IDs and `label[for]` are indexed once per audited input. `label[for]`, `aria-labelledby`, and `aria-describedby` can report a missing or ambiguous target; a uniquely resolved `label[for]` target is also checked when it is a known non-labelable built-in, and each label can report multiple known labelable built-in descendants. Unique `aria-labelledby` targets are read in order from their direct `aria-label`/text-image-alt/SVG-title/title sources; the target's own `aria-labelledby` is not followed. Custom-element form association, CSS visibility, and full browser AccName traversal remain outside scope. |
 | Table `headers` and explicit `scope` | Partially supported | A `td` or `th` token must target another unique cell in the same nearest table; explicit `th[scope]` is limited to HTML's four keywords. Role, visibility, semantic header quality, and implicit association are outside this static check. |
 | CSS visibility, layout, focusability, and rendered accessibility tree | Not supported automatically | Static HTML cannot determine stylesheet cascades, computed visibility, focus order, shadow DOM, or browser/assistive-technology behavior. These require manual review or browser-based tooling. |
@@ -62,6 +63,7 @@ npx --yes html-validate@11.16.0 --rule no-dup-id:2 examples/comparison/duplicate
 | `aria-role-attribute-compatibility.html` | The self-authored custom `role=button`/`aria-autocomplete` and `role=emphasis` naming cases are suitable for comparison with axe-core `aria-allowed-attr` and `aria-prohibited-attr`. | axe-core is broader. A11yTrace checks only its published role/property rows, leaves `aria-checked` to its dedicated compatibility rule, and skips native form controls rather than attempting the full ARIA-in-HTML mapping. |
 | `aria-required-context-role.html` | The self-authored valid tablist/tab and invalid nested tab cases are suitable for comparison with axe-core `aria-required-parent`. | axe-core is broader. A11yTrace implements only its published WAI-ARIA 1.2 table, accepts one unique local `aria-owns` owner, and deliberately skips root/hidden/presentational/ambiguous ownership instead of reconstructing a browser accessibility tree. |
 | `static-accessible-name.html` | The direct SVG `<title>` link and button have a static name; the SVG `<desc>`-only controls and a button whose IDREF target only points at another IDREF have no confirmed static name. | The fixture is compared with axe-core `link-name` and `button-name`; A11yTrace keeps browser-only SVG mappings as review items instead of treating them as definite names. |
+| `image-text-alternative.html` | Non-empty alt/ARIA/title sources and static decorative cases are accepted; bare or explicit image-role empty alternatives are reported. | The fixture is compared with axe-core `image-alt`; A11yTrace intentionally does not evaluate whether text serves the image purpose and leaves unmodeled role mappings as review. |
 
 To run that development-only comparison with a ChromeDriver compatible with the
 locally installed Chrome:
@@ -70,6 +72,7 @@ locally installed Chrome:
 npx --yes @axe-core/cli@4.11.0 --rules aria-allowed-attr,aria-prohibited-attr examples/comparison/aria-role-attribute-compatibility.html
 npx --yes @axe-core/cli@4.11.0 --rules aria-required-parent file:///absolute/path/to/A11yTrace/examples/comparison/aria-required-context-role.html
 npx --yes @axe-core/cli@4.11.0 --rules link-name,button-name file:///absolute/path/to/A11yTrace/examples/comparison/static-accessible-name.html
+npx --yes @axe-core/cli@4.11.0 --rules image-alt file:///absolute/path/to/A11yTrace/examples/comparison/image-text-alternative.html
 ```
 
 The role/property command was attempted on this checkout on 2026-09-30, but
@@ -89,6 +92,16 @@ It did not report the corresponding direct SVG `<title>` fixtures. A11yTrace
 agrees for the direct-title and indirect-IDREF cases; it emits ReviewItems,
 rather than definite findings, for the desc-only cases because it intentionally
 does not claim that `<desc>` supplies a browser accessible name.
+
+The image-text-alternative command was run on this checkout on 2026-09-30.
+axe-core 4.11.4 reported the self-authored whitespace-only `alt`, omitted
+`alt`, and focusable `role="none"` images under `image-alt`. A11yTrace reports
+those same three cases through `img-text-alternative-missing` when that rule is
+selected. It additionally reports the fixture's empty-name `role="img"` and
+stateful presentational-role cases, following the relevant static ACT examples;
+axe did not report those with `image-alt` in this run. A11yTrace still leaves unmodeled
+explicit roles as ReviewItems and does not assess image purpose or alternative
+quality. This is a scoped comparison, not a claim of tool equivalence.
 
 This small comparison demonstrates selected aligned semantics only. It is not a
 claim of equivalent configuration, parser behavior, rule coverage, or output

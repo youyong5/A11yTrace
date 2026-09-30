@@ -526,11 +526,12 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 80)
+  assert_eq(rules.length(), 81)
   assert_eq(rules[0].id, "img-alt-missing")
-  assert_eq(rules[21].id, "meta-refresh-delay")
-  assert_eq(rules[22].id, "aria-state-value-invalid")
-  assert_eq(rules[23].id, "button-implicit-submit")
+  assert_eq(rules[1].id, "img-text-alternative-missing")
+  assert_eq(rules[22].id, "meta-refresh-delay")
+  assert_eq(rules[23].id, "aria-state-value-invalid")
+  assert_eq(rules[24].id, "button-implicit-submit")
   rules[0] = {
     id: "changed",
     summary: "changed",
@@ -1000,19 +1001,20 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 80)
+  assert_eq(rule_ids.length(), 81)
   assert_eq(rule_ids[0], "img-alt-missing")
-  assert_eq(rule_ids[4], "heading-level-skipped")
-  assert_eq(rule_ids[5], "heading-name-missing")
-  assert_eq(rule_ids[6], "document-title-missing")
-  assert_eq(rule_ids[9], "duplicate-id")
-  assert_eq(rule_ids[10], "reference-target-invalid")
-  assert_eq(rule_ids[14], "area-alt-missing")
-  assert_eq(rule_ids[15], "aria-hidden-focus-review")
-  assert_eq(rule_ids[20], "aria-abstract-role")
-  assert_eq(rule_ids[21], "meta-refresh-delay")
-  assert_eq(rule_ids[22], "aria-state-value-invalid")
-  assert_eq(rule_ids[23], "button-implicit-submit")
+  assert_eq(rule_ids[1], "img-text-alternative-missing")
+  assert_eq(rule_ids[5], "heading-level-skipped")
+  assert_eq(rule_ids[6], "heading-name-missing")
+  assert_eq(rule_ids[7], "document-title-missing")
+  assert_eq(rule_ids[10], "duplicate-id")
+  assert_eq(rule_ids[11], "reference-target-invalid")
+  assert_eq(rule_ids[15], "area-alt-missing")
+  assert_eq(rule_ids[16], "aria-hidden-focus-review")
+  assert_eq(rule_ids[21], "aria-abstract-role")
+  assert_eq(rule_ids[22], "meta-refresh-delay")
+  assert_eq(rule_ids[23], "aria-state-value-invalid")
+  assert_eq(rule_ids[24], "button-implicit-submit")
   assert_true(rule_ids.contains("aria-attribute-undefined"))
   assert_true(rule_ids.contains("role-value-invalid"))
   assert_true(rule_ids.contains("table-scope-invalid"))
@@ -1119,6 +1121,16 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       assert_true(criterion.rule_ids.contains("element-lang-invalid"))
     }
     None => fail("language-of-parts coverage must retain its partial boundary")
+  }
+  match @a11ytrace.wcag_criterion("1.1.1") {
+    Some(criterion) => {
+      assert_true(
+        criterion.coverage_status
+        is @a11ytrace.WcagCoverageStatus::PartialAutomatic,
+      )
+      assert_true(criterion.rule_ids.contains("img-text-alternative-missing"))
+    }
+    None => fail("image alternative coverage must retain its partial boundary")
   }
   let result = @a11ytrace.audit_html_with_wcag_coverage("<p>Clean-looking</p>")
   assert_eq(result.audit.findings.length(), 0)
@@ -3536,4 +3548,135 @@ test "static name result keeps diagnostics review order and detailed JSON" {
     }
     _ => fail("detailed JSON must retain the distinct static name outcomes")
   }
+}
+
+///|
+test "image text alternatives distinguish names decoration and missing alternatives" {
+  let fragment = "<img alt=\"Chart\">" +
+    "<img alt=\"\">" +
+    "<img alt=\" \">" +
+    "<img>" +
+    "<img aria-label=\"Company logo\">" +
+    "<span id=\"image-label\">Monthly report</span><img aria-labelledby=\"image-label\">" +
+    "<img title=\"Settings icon\">" +
+    "<img role=\"presentation\">" +
+    "<img role=\"none\" alt=\"\">" +
+    "<img role=\"img\" alt=\"\">" +
+    "<img role=\"none\" tabindex=\"0\">" +
+    "<img role=\"none\" alt=\"\" aria-checked=\"true\">" +
+    "<div aria-hidden=\"true\"><img></div>" +
+    "<template><img></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "img-text-alternative-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 5)
+      assert_eq(findings[0].rule_id, "img-text-alternative-missing")
+      assert_eq(findings[0].element_path, "img:nth-of-type(3)")
+      assert_eq(findings[1].element_path, "img:nth-of-type(4)")
+      assert_eq(findings[2].element_path, "img:nth-of-type(10)")
+      assert_eq(findings[3].element_path, "img:nth-of-type(11)")
+      assert_eq(findings[4].element_path, "img:nth-of-type(12)")
+    }
+    Audited(_) =>
+      fail(
+        "only unhidden nondecorative images without supported names must report",
+      )
+    ConfigurationError(_) => fail("image semantic rule must be selectable")
+  }
+}
+
+///|
+test "image text alternative rule keeps unmodeled role mappings as review" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<img role=\"future-image-role\"><svg role=\"img\"></svg>",
+      ["img-text-alternative-missing", "role-img-name-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("image rules must audit fragments")
+  }
+  assert_eq(detailed.findings.length(), 0)
+  assert_eq(detailed.review_items.length(), 2)
+  assert_eq(detailed.review_items[0].rule_id, "img-text-alternative-missing")
+  assert_eq(detailed.review_items[1].rule_id, "role-img-name-missing")
+}
+
+///|
+test "image semantic rule avoids duplicate default finding and keeps legacy selection" {
+  match @a11ytrace.audit_html("<img>") {
+    Findings(findings) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+    }
+    _ => fail("the default audit must retain one legacy missing-alt Finding")
+  }
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules("<img></span>", [
+      "img-alt-missing", "img-text-alternative-missing",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("selected image rules must handle recoverable markup")
+  }
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "img-alt-missing")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array([{ "rule_id": String(rule_id), .. }]),
+      "parse_diagnostics": Array([_, ..]),
+      ..
+    } => assert_eq(rule_id, "img-alt-missing")
+    _ => fail("legacy image Finding and diagnostics must remain JSON-visible")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<img>", ["img-alt-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+    }
+    Audited(_) =>
+      fail("legacy image rule must retain its attribute-only behavior")
+    ConfigurationError(_) => fail("legacy image rule must remain selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<img aria-label=\"Logo\">", [
+      "img-alt-missing", "img-text-alternative-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+    }
+    Audited(_) =>
+      fail("legacy alt-presence behavior must not be hidden by ARIA")
+    ConfigurationError(_) => fail("both image rules must remain selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules("<img>", [
+      "img-text-alternative-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-text-alternative-missing")
+    }
+    Audited(_) =>
+      fail("semantic image rule must report a static missing alternative")
+    ConfigurationError(_) => fail("semantic image rule must remain selectable")
+  }
+}
+
+///|
+test "native img role image is owned by image semantics not the SVG role rule" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<img role=\"img\" alt=\"\">",
+      ["img-text-alternative-missing", "role-img-name-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("native image role markup must be auditable")
+  }
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "img-text-alternative-missing")
+  assert_eq(detailed.review_items.length(), 0)
 }

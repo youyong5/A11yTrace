@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 80 stable IDs include confirmed static findings, structural hints, and
+The 81 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 80
-selectable IDs separately as 49 confirmed-finding checks, 7 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 81
+selectable IDs separately as 50 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -582,6 +582,34 @@ narrow static 4.1.2 signal, not a full WCAG conclusion.
 Reports an HTML `<img>` element that omits the `alt` attribute. The suggested repair is to add an appropriate `alt` attribute; `alt=""` is a valid explicit choice for a decorative image.
 
 This rule is based on the guidance in the [W3C Images Tutorial](https://www.w3.org/WAI/tutorials/images/). It intentionally checks attribute presence only. It cannot judge an image's purpose or the quality of an alternative text, and it is not a conformance claim for a page or product.
+
+## `img-text-alternative-missing`
+
+This separate `<img>` semantic check asks whether the limited static subset can
+confirm a non-empty text alternative, decoration/exclusion, a missing
+alternative, or an uncertain browser mapping. It uses the shared name order:
+unique local `aria-labelledby`, non-empty `aria-label`, non-empty `alt`, then
+fallback `title`. It confirms decoration for an exactly empty `alt=""` (not
+whitespace such as `alt=" "`), an effective
+`role="none"` or `role="presentation"`, or `aria-hidden="true"` on the
+image or an ancestor.
+
+An explicit `role="img"` with no supported name is a Finding, including when
+`alt` is empty. A presentational role with static focusability (`tabindex` or a
+native focus behavior) or any ARIA state/property is not treated as decorative;
+the supported name sources are then checked normally. An unmodeled explicit
+role yields a ReviewItem rather than a missing-alternative Finding. `template`
+content is excluded and fragment IDREFs resolve only within the fragment.
+
+When every rule is enabled, a bare `<img>` without `alt` retains the legacy
+`img-alt-missing` Finding, instead of receiving two statements of the same
+absence. Selecting `img-text-alternative-missing` alone reports its semantic
+Finding. `role-img-name-missing` remains the rule for non-`img` image roles,
+including `<svg role="img">`; this rule intentionally does not duplicate SVG
+coverage. These focused static outcomes do not decide whether an image is
+decorative in context or whether any supplied alternative accurately serves its
+purpose, and therefore are not standalone WCAG conformance conclusions. The
+scope is calibrated against [W3C ACT Rule 23a2a8](https://www.w3.org/WAI/standards-guidelines/act/rules/23a2a8/).
 
 ## `form-control-name-missing`
 
