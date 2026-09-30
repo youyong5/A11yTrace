@@ -4,13 +4,13 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 ## Install and use
 
-The published package is `youyong5/a11ytrace@0.4.0`. In a fresh MoonBit
+The published package is `youyong5/a11ytrace@0.5.0`. In a fresh MoonBit
 project, install it from Mooncakes and import the public package name:
 
 ```text
 moon new a11ytrace-demo
 cd a11ytrace-demo
-moon add youyong5/a11ytrace@0.4.0
+moon add youyong5/a11ytrace@0.5.0
 ```
 
 Add this import to the generated `cmd/main/moon.pkg` before its `pkgtype`
@@ -42,9 +42,9 @@ moon run cmd/main
 To work from a checkout instead, clone it and run `moon check`; the module name
 is still `youyong5/a11ytrace`.
 
-## Current development checkout
+## Release 0.5.0
 
-This next-version checkout has 80 selectable built-in IDs: 49 confirmed Finding
+Release 0.5.0 has 80 selectable built-in IDs: 49 confirmed Finding
 checks, 7 static hints, and 24 ReviewItem triggers. These are distinct result
 classes, not 80 automatic WCAG checks. Its public WCAG directory records the 55 current
 WCAG 2.2 A/AA success criteria and one historical WCAG 2.1 entry (4.1.1,

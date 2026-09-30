@@ -2,9 +2,9 @@
 
 A11yTrace is a small, pure MoonBit library for statically checking HTML accessibility rules.
 
-## Current development checkout
+## Release 0.5.0
 
-This next-version checkout provides 80 selectable built-in IDs, deliberately
+Release 0.5.0 provides 80 selectable built-in IDs, deliberately
 separated into 49 confirmed Finding checks, 7 static hints, and 24 ReviewItem
 triggers. That directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
@@ -23,7 +23,7 @@ name:
 ```text
 moon new a11ytrace-demo
 cd a11ytrace-demo
-moon add youyong5/a11ytrace@0.4.0
+moon add youyong5/a11ytrace@0.5.0
 ```
 
 Add this import to the generated `cmd/main/moon.pkg` before its `pkgtype`
