@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 65 stable IDs include confirmed static findings, structural hints, and
+The 67 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 65
-selectable IDs separately as 35 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 67
+selectable IDs separately as 37 confirmed-finding checks, 6 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -44,8 +44,8 @@ New narrow static rules are intentionally bounded: selected ARIA required
 property checks cover checkbox/switch `aria-checked`, combobox
 `aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover
 `aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
-The role-name checks cover checkbox, combobox, slider, progressbar, meter,
-image, dialog and alertdialog roles with the same limited static naming
+The role-name checks cover custom button/link, checkbox, combobox, slider,
+progressbar, meter, image, dialog and alertdialog roles with the same limited static naming
 sources as native-name rules. They do not claim full ARIA role validation or
 browser name computation. `nested-interactive` only flags interactive
 descendants of links or buttons; list rules only inspect direct children;
@@ -322,6 +322,24 @@ findings. This intentionally validates the WAI-ARIA 1.2 core role vocabulary
 only; host-language extensions, role permission, required descendants, and
 the browser accessibility-tree mapping are outside scope. See [WAI-ARIA 1.2
 role processing](https://www.w3.org/TR/wai-aria-1.2/#role_definitions).
+
+## `role-button-name-missing` and `role-link-name-missing`
+
+Report an effective custom `role="button"` or `role="link"` without a
+supported static name. They accept non-empty descendant text, descendant image
+`alt`, resolvable `aria-labelledby`, non-empty `aria-label`, and fallback
+`title`. Whitespace-only content and `img[alt=""]` do not supply a name. The
+effective role follows the same ordered concrete-role fallback as the rest of
+the library, so `role="future-role button"` is checked as a button.
+
+Native buttons, `<a href>`, and the selected native form controls are excluded
+because their established name rules already own those elements; one element
+does not receive both a native and custom-role name Finding. When an otherwise
+unnamed custom role contains SVG, the rule emits a ReviewItem rather than a
+Finding because SVG/browser name sources are not reliably computed. This is a
+bounded static presence check informed by [Accessible Name and Description
+Computation 1.2](https://www.w3.org/TR/accname-1.2/), not a complete browser
+AccName implementation or WCAG conformance conclusion.
 
 ## `table-scope-invalid`
 

@@ -4,8 +4,8 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Version 0.2.0
 
-This checkout provides 65 selectable built-in IDs, deliberately separated into
-35 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
+This checkout provides 67 selectable built-in IDs, deliberately separated into
+37 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
 directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
@@ -196,7 +196,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 65 independently selectable checks and review
+The rule directory now has 67 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -222,6 +222,8 @@ from confirmed findings.
 `body-aria-hidden` reports `aria-hidden="true"` on the body of a complete document. `multiple-main` is a static structural prompt for every main after the first in a complete document. When a document has multiple `<nav>` landmarks, `navigation-landmark-name-missing` reports a landmark without a supported static distinguishing name and `navigation-landmark-name-duplicate` reports a later repeated static name. These page-structure rules do not run for fragments.
 
 `aria-hidden-focus-review` is a review item rather than a confirmed finding. It identifies a potentially focusable native element or explicit `tabindex` within an `aria-hidden="true"` element or ancestor; descendant `aria-hidden="false"` cannot undo an ancestor's hidden state. Disabled native controls are excluded, but `aria-disabled` alone is not. CSS, scripting, and browser focus behavior decide the final outcome. `aria-abstract-role` reports an abstract ARIA 1.2 role only when no concrete fallback token exists. `role-value-invalid` reports a non-empty role list only when it has no concrete WAI-ARIA 1.2 fallback, so `role="future-role button"` is accepted and `role="widget checkbox"` is checked as a checkbox without a second abstract-role finding.
+
+`role-button-name-missing` and `role-link-name-missing` check effective custom `role="button"` and `role="link"` elements for the same bounded static sources as other name rules: descendant text, non-empty image alt, `aria-labelledby`, `aria-label`, and title. Native buttons, `<a href>`, and form controls are excluded when an existing native name rule already owns the element, avoiding duplicate name findings. SVG-only cases become ReviewItems rather than definite missing-name findings.
 
 `meta-refresh-delay` applies only to complete documents and reports a `meta[http-equiv="refresh"]` with a supported numeric delay greater than zero. It does not check refresh loops, long-delay exceptions, malformed delay syntax, or runtime changes. `aria-attribute-undefined` checks only whether an `aria-*` name belongs to WAI-ARIA 1.2, including 1.2 additions and deprecated-but-defined names; it does not validate permission or values. `aria-state-value-invalid` checks only these explicitly listed static values: boolean `aria-busy`, `aria-disabled`, `aria-modal`, `aria-multiline`, `aria-multiselectable`, `aria-readonly`, and `aria-required`; true/false/undefined `aria-expanded` and `aria-hidden`; tristate `aria-checked` and `aria-pressed`; and token values for `aria-current` and `aria-invalid`. `table-scope-invalid` only reports an explicit invalid `th[scope]` keyword, never an omitted scope or a `td[scope]`; it does not infer table associations.
 

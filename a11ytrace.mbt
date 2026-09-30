@@ -873,6 +873,24 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "Checks explicit scope on th only; absent scope and header association inference are outside scope.",
     ),
     rule(
+      "role-button-name-missing",
+      "Custom button role lacks a supported static name.",
+      ContentName,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      aria,
+      "Checks effective role=button only when no native button, link, or form-control name rule already applies; SVG-only cases become review items.",
+    ),
+    rule(
+      "role-link-name-missing",
+      "Custom link role lacks a supported static name.",
+      ContentName,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      aria,
+      "Checks effective role=link only when no native button, link, or form-control name rule already applies; SVG-only cases become review items.",
+    ),
+    rule(
       "aria-required-property-missing",
       "Selected ARIA role omits a required state or property.",
       Aria,
@@ -2221,6 +2239,22 @@ fn collect_extended_aria_findings(
   }
   let role = primary_role(node)
   if role is Some(role_name) {
+    let custom_name_rule = custom_role_name_rule_id(role_name)
+    if custom_name_rule is Some(rule_id) &&
+      is_rule_enabled(enabled, rule_id) &&
+      is_custom_role_name_target(node) &&
+      !has_generic_static_name(node, context) {
+      if has_potential_svg_name_source(node) {
+        review_items_for_svg_name(node, path, review_items, rule_id)
+      } else {
+        findings.push(
+          generic_finding(
+            node, path, rule_id, "This custom ARIA role has no recognizable accessible name in static markup.",
+            "Add visible text, an image with non-empty alt text, aria-label, aria-labelledby, or title.",
+          ),
+        )
+      }
+    }
     let name_rule = role_name_rule_id(role_name)
     if name_rule is Some(rule_id) && is_rule_enabled(enabled, rule_id) {
       if !has_role_static_name(node, role_name, context) {
@@ -2635,6 +2669,22 @@ fn role_name_rule_id(role : String) -> String? {
     "dialog" | "alertdialog" => Some("role-dialog-name-missing")
     _ => None
   }
+}
+
+///|
+fn custom_role_name_rule_id(role : String) -> String? {
+  match role {
+    "button" => Some("role-button-name-missing")
+    "link" => Some("role-link-name-missing")
+    _ => None
+  }
+}
+
+///|
+fn is_custom_role_name_target(node : @dom.Node) -> Bool {
+  !is_button_to_check(node) &&
+  !is_link_to_check(node) &&
+  !is_form_control_to_check(node)
 }
 
 ///|
@@ -3395,6 +3445,9 @@ fn is_non_name_text_element(name : String) -> Bool {
 
 ///|
 fn has_nonempty_image_alt(node : @dom.Node) -> Bool {
+  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
+    return false
+  }
   if node.kind() is @dom.Element &&
     node.name() == "img" &&
     has_nonempty_attribute(node, "alt") {
@@ -3410,6 +3463,9 @@ fn has_nonempty_image_alt(node : @dom.Node) -> Bool {
 
 ///|
 fn has_potential_svg_name_source(node : @dom.Node) -> Bool {
+  if node.kind() is @dom.Element && is_non_name_text_element(node.name()) {
+    return false
+  }
   if node.kind() is @dom.Element && node.name() == "svg" {
     return true
   }

@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 65)
+  assert_eq(rules.length(), 67)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[19].id, "meta-refresh-delay")
   assert_eq(rules[20].id, "aria-state-value-invalid")
@@ -572,6 +572,16 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("new ARIA metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("role-button-name-missing") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::ContentName)
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("custom role name metadata must be available")
   }
 }
 
@@ -898,7 +908,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 65)
+  assert_eq(rule_ids.length(), 67)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -914,6 +924,8 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("aria-attribute-undefined"))
   assert_true(rule_ids.contains("role-value-invalid"))
   assert_true(rule_ids.contains("table-scope-invalid"))
+  assert_true(rule_ids.contains("role-button-name-missing"))
+  assert_true(rule_ids.contains("role-link-name-missing"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2168,5 +2180,99 @@ test "labelledby self references and cycles use bounded static target computatio
         "cycles must not invent static names and valid fallbacks must remain usable",
       )
     ConfigurationError(_) => fail("known name rules must be accepted")
+  }
+}
+
+///|
+test "custom button and link roles accept the shared static name sources" {
+  let fragment = "<span id=\"shared\" aria-label=\"Shared name\"></span>" +
+    "<div role=\"button\">Save</div>" +
+    "<span role=\"link\"><img src=\"guide.svg\" alt=\"Guide\"></span>" +
+    "<div role=\"future-role button\" aria-labelledby=\"shared\"></div>" +
+    "<span role=\"link\" aria-label=\"Profile\"></span>" +
+    "<span role=\"link\" title=\"Settings\"></span>"
+  let selected = ["role-button-name-missing", "role-link-name-missing"]
+  match @a11ytrace.audit_html_fragment_with_rules(fragment, selected) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("supported static custom-role names must not report")
+    ConfigurationError(_) =>
+      fail("known custom role name rules must be accepted")
+  }
+  let invalid = "<div role=\"button\"> </div>" +
+    "<span role=\"link\"><img src=\"decorative.svg\" alt=\"\"></span>" +
+    "<div role=\"future-role button\"></div>" +
+    "<span role=\"link\"><template><img alt=\"Template only\"></template></span>"
+  match @a11ytrace.audit_html_fragment_with_rules(invalid, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].rule_id, "role-button-name-missing")
+      assert_eq(findings[1].rule_id, "role-link-name-missing")
+      assert_eq(findings[2].rule_id, "role-button-name-missing")
+      assert_eq(findings[3].rule_id, "role-link-name-missing")
+    }
+    Audited(_) =>
+      fail("empty and decorative-image-only custom roles must report")
+    ConfigurationError(_) =>
+      fail("known custom role name rules must be accepted")
+  }
+}
+
+///|
+test "custom role name checks run for documents and not native name-rule targets" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<button></button><a href=\"/empty\"></a><div role=\"button\"></div>" +
+    "<a role=\"link\"></a></body></html>"
+  let selected = ["role-button-name-missing", "role-link-name-missing"]
+  match @a11ytrace.audit_html_with_rules(document, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "role-button-name-missing")
+      assert_eq(findings[1].rule_id, "role-link-name-missing")
+    }
+    Audited(_) =>
+      fail(
+        "document custom roles must be checked while native targets are excluded",
+      )
+    ConfigurationError(_) =>
+      fail("known custom role name rules must be accepted")
+  }
+}
+
+///|
+test "custom role SVG naming is a review and JSON keeps native findings distinct" {
+  let fragment = "<button></button><a href=\"/empty\"></a>" +
+    "<div role=\"button\"></div><span role=\"link\"><svg></svg></span>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "button-name-missing", "link-name-missing", "role-button-name-missing", "role-link-name-missing",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known custom role name rules must audit")
+  }
+  assert_eq(detailed.findings.length(), 3)
+  assert_eq(detailed.findings[0].rule_id, "button-name-missing")
+  assert_eq(detailed.findings[1].rule_id, "link-name-missing")
+  assert_eq(detailed.findings[2].rule_id, "role-button-name-missing")
+  assert_eq(detailed.review_items.length(), 1)
+  assert_eq(detailed.review_items[0].rule_id, "role-link-name-missing")
+  let json = @a11ytrace.render_detailed_audit_json(detailed)
+  match @json.parse(json) {
+    {
+      "findings": Array(
+        [
+          { "rule_id": String(first), .. },
+          { "rule_id": String(second), .. },
+          { "rule_id": String(third), .. },
+        ]
+      ),
+      "review_items": Array([{ "rule_id": String(review), .. }]),
+      ..
+    } => {
+      assert_eq(first, "button-name-missing")
+      assert_eq(second, "link-name-missing")
+      assert_eq(third, "role-button-name-missing")
+      assert_eq(review, "role-link-name-missing")
+    }
+    _ => fail("detailed JSON must preserve custom role finding and review IDs")
   }
 }
