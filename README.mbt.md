@@ -2,7 +2,7 @@
 
 A11yTrace is a small, pure MoonBit library for statically checking HTML accessibility rules.
 
-## Current development checkout
+## Version 0.3.0
 
 This checkout provides 68 selectable built-in IDs, deliberately separated into
 38 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That

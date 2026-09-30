@@ -4,9 +4,9 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 ## Install and use
 
-The published package is `youyong5/a11ytrace@0.2.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
+The published package is `youyong5/a11ytrace@0.3.0`. To work from a checkout, clone it and run `moon check`; the module name is `youyong5/a11ytrace`.
 
-## Current development checkout
+## 0.3.0 release
 
 This checkout has 68 selectable built-in IDs: 38 confirmed Finding checks, 6
 static hints, and 24 ReviewItem triggers. These are distinct result classes,
