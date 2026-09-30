@@ -4,9 +4,9 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Current development checkout
 
-This checkout provides 73 selectable built-in IDs, deliberately separated into
-43 confirmed Finding checks, 6 static hints, and 24 ReviewItem triggers. That
-directory is not an automatic WCAG-conformance count. The public WCAG directory
+This next-version checkout provides 76 selectable built-in IDs, deliberately
+separated into 45 confirmed Finding checks, 7 static hints, and 24 ReviewItem
+triggers. That directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
 2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
 and 13 are not assessed. Zero findings never means WCAG conformance.
@@ -234,7 +234,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 73 independently selectable checks and review
+The rule directory now has 76 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -242,6 +242,16 @@ zoom tokens; and located media, keyboard, focus, target-size, dragging,
 pointer, motion, form, authentication, status-message, language, contrast and
 sequence review markers. These manual-review items are deliberately separate
 from confirmed findings.
+
+The next-version `aria-checked-role-incompatible` rule reports `aria-checked`
+only when an explicit effective WAI-ARIA 1.2 role does not support that state;
+it leaves native host-language semantics and all other ARIA-property permission
+tables outside its deliberately narrow scope. `listitem-orphan` reports a
+recovered `<li>` whose direct parent is not `ul`, `ol`, or `menu`; parser
+recovery can change malformed source structure. `fieldset-legend-missing` is a
+static grouping prompt when a fieldset has more than one known native labelable
+descendant but no non-empty first `<legend>`; it is not an asserted WCAG
+failure and does not infer custom form association.
 
 `img-alt-missing` reports an `<img>` that has no `alt` attribute. An explicit `alt=""` is accepted for decorative images, as is any non-empty `alt` value. The rule does not determine whether an image is decorative, whether alternative text is good, or whether a whole document conforms to WCAG.
 

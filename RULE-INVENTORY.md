@@ -2,8 +2,8 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **73 selectable metadata IDs**, comprising **43 confirmed-finding
-checks**, **6 static-hint checks**, and **24 manual-review triggers**. The
+there are **76 selectable metadata IDs**, comprising **45 confirmed-finding
+checks**, **7 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
 none of these counts is a count of WCAG criteria automatically passed.
@@ -89,6 +89,9 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | meaningful-sequence-review | new | manual review | selected text/control element | 1.3.2 | ER | remaining review markers have specific triggers and clean markup has none |
 | contrast-review | new | manual review | selected text/control element | 1.4.3/1.4.11 | ER | remaining review markers have specific triggers and clean markup has none |
 | text-resize-review | new | manual review | complete-document html element | 1.4.4/1.4.10 | ER | remaining review markers have specific triggers and clean markup has none |
+| aria-checked-role-incompatible | next version | confirmed | explicit effective role that does not support `aria-checked` carries that attribute | 4.1.2 static semantic-markup evidence | ES/H | accepts every supported checked role, radio fallback, and native controls; default selection avoids a duplicate malformed-value Finding |
+| listitem-orphan | next version | confirmed | recovered `li` direct parent is not ul/ol/menu | HTML list content-model practice; not a per-instance WCAG verdict | ES/H | reports a root orphan and accepts menu child; template contents are skipped |
+| fieldset-legend-missing | next version | static hint | fieldset with multiple known native labelable descendants has no named first legend | form grouping best practice | ES/H | accepts a named first legend and one-control fieldset; reports empty/missing first legend |
 
 The role-name rows are catalogued as confirmed-finding rules because a definite
 missing author/static name produces a `Finding`; their SVG-only branch produces

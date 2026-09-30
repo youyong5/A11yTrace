@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 73 stable IDs include confirmed static findings, structural hints, and
+The 76 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 73
-selectable IDs separately as 43 confirmed-finding checks, 6 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 76
+selectable IDs separately as 45 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -343,6 +343,43 @@ defined ARIA attribute is permitted for the element's role, whether its value
 is valid, or whether an extension defined by another specification is
 supported. Template contents are not audited. It applies equally to complete
 documents and supplied fragments.
+
+## `aria-checked-role-incompatible`
+
+Reports an explicit effective WAI-ARIA 1.2 role carrying `aria-checked` when
+that role is not one of `checkbox`, `menuitemcheckbox`, `menuitemradio`,
+`option`, `radio`, `switch`, or `treeitem`. It honors the existing ordered role
+fallback, so `role="future-role radio"` is handled as a radio. A role that
+supports `aria-checked` is not reported, and a native element without an
+explicit effective role is outside this narrow check.
+
+This is not a full ARIA property-permission implementation: it checks only
+`aria-checked`, does not validate native host-language mappings, and does not
+replace the selected ARIA state-value rule. When both rules are selected, an
+incompatible role owns its `aria-checked` Finding even if that value is also
+malformed, so one attribute does not produce duplicate Findings; selecting the
+established value rule alone retains its value check. It is a static
+semantic-markup finding informed by [WAI-ARIA 1.2 aria-checked](https://www.w3.org/TR/wai-aria-1.2/#aria-checked).
+
+## `listitem-orphan`
+
+Reports a recovered `<li>` whose direct parent is not `<ul>`, `<ol>`, or
+`<menu>`. Nested lists and `<menu><li>` are accepted. HTML parser recovery can
+change malformed source tree parentage, and template contents are not audited.
+This is a concrete HTML list-structure check, not a conclusion that every
+instance independently violates WCAG. See the [HTML li element definition](https://html.spec.whatwg.org/multipage/grouping-content.html#the-li-element).
+
+## `fieldset-legend-missing`
+
+Adds a static structural prompt when a `<fieldset>` contains more than one
+known native labelable descendant (excluding hidden inputs and template
+contents) but its first element child is not a legend with a supported static
+name. A named first legend is accepted; a later legend does not serve as the
+fieldset caption. Custom form-associated elements are deliberately not counted.
+
+This is a grouping best-practice hint, not an asserted WCAG failure: the
+library cannot infer whether controls are semantically related, rendered
+visibility, or browser form association. See the [W3C forms grouping tutorial](https://www.w3.org/WAI/tutorials/forms/grouping/).
 
 ## `role-value-invalid`
 

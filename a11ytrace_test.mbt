@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 73)
+  assert_eq(rules.length(), 76)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[21].id, "meta-refresh-delay")
   assert_eq(rules[22].id, "aria-state-value-invalid")
@@ -959,7 +959,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 73)
+  assert_eq(rule_ids.length(), 76)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -983,6 +983,9 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("aria-range-value-invalid"))
   assert_true(rule_ids.contains("label-for-target-not-labelable"))
   assert_true(rule_ids.contains("label-multiple-labelable-descendants"))
+  assert_true(rule_ids.contains("aria-checked-role-incompatible"))
+  assert_true(rule_ids.contains("listitem-orphan"))
+  assert_true(rule_ids.contains("fieldset-legend-missing"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -2772,5 +2775,177 @@ test "custom role SVG naming is a review and JSON keeps native findings distinct
       assert_eq(review, "role-link-name-missing")
     }
     _ => fail("detailed JSON must preserve custom role finding and review IDs")
+  }
+}
+
+///|
+test "next-release ARIA compatibility and grouping rules stay narrowly scoped" {
+  let fragment = "<div role=\"button\" aria-checked=\"true\"></div>" +
+    "<div role=\"future-role radio\" aria-checked=\"true\"></div>" +
+    "<input type=\"checkbox\" aria-checked=\"true\">" +
+    "<li>Orphan</li><menu><li>Allowed</li></menu>" +
+    "<fieldset><input><select></select></fieldset>" +
+    "<fieldset><legend>Contact</legend><input><select></select></fieldset>" +
+    "<fieldset><input></fieldset><template><fieldset><input><select></select></fieldset></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "aria-checked-role-incompatible", "listitem-orphan", "fieldset-legend-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 3)
+      assert_eq(findings[0].rule_id, "aria-checked-role-incompatible")
+      assert_eq(findings[1].rule_id, "listitem-orphan")
+      assert_eq(findings[2].rule_id, "fieldset-legend-missing")
+    }
+    Audited(_) =>
+      fail("the selected next-release rules should find the three scoped cases")
+    ConfigurationError(_) => fail("next-release rule IDs must be selectable")
+  }
+}
+
+///|
+test "next-release grouping rules retain document order and parser diagnostics" {
+  let fragment = "<fieldset><legend></legend><input><textarea></textarea></fieldset>" +
+    "<div role=\"slider\" aria-checked=\"false\"></div></span>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "fieldset-legend-missing", "aria-checked-role-incompatible",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("known next-release rules should produce a detailed audit")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "fieldset-legend-missing")
+  assert_eq(detailed.findings[1].rule_id, "aria-checked-role-incompatible")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      ..
+    } => {
+      assert_eq(first, "fieldset-legend-missing")
+      assert_eq(second, "aria-checked-role-incompatible")
+    }
+    _ => fail("detailed JSON must keep next-release rule IDs")
+  }
+}
+
+///|
+test "aria checked compatibility accepts every supported explicit role and fallback" {
+  let supported = "<div role=\"checkbox\" aria-checked=\"true\"></div>" +
+    "<div role=\"radio\" aria-checked=\"false\"></div>" +
+    "<div role=\"switch\" aria-checked=\"true\"></div>" +
+    "<div role=\"menuitemcheckbox\" aria-checked=\"mixed\"></div>" +
+    "<div role=\"menuitemradio\" aria-checked=\"false\"></div>" +
+    "<div role=\"option\" aria-checked=\"true\"></div>" +
+    "<div role=\"treeitem\" aria-checked=\"mixed\"></div>" +
+    "<div role=\"future-role radio\" aria-checked=\"true\"></div>" +
+    "<input type=\"checkbox\" aria-checked=\"true\">"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(supported, [
+      "aria-checked-role-incompatible",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail("supported and native checked states must not be incompatible")
+    ConfigurationError(_) => fail("the compatibility rule must be selectable")
+  }
+  let unsupported = "<div role=\"button\" aria-checked=\"true\"></div>" +
+    "<div role=\"future-role slider\" aria-checked=\"false\"></div>" +
+    "<div role=\"unknown-role\" aria-checked=\"true\"></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(unsupported, [
+      "aria-checked-role-incompatible",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].element_path, "div:nth-of-type(1)")
+      assert_eq(findings[1].element_path, "div:nth-of-type(2)")
+    }
+    Audited(_) => fail("only known unsupported explicit roles must report")
+    ConfigurationError(_) => fail("the compatibility rule must be selectable")
+  }
+}
+
+///|
+test "checked role compatibility avoids duplicate invalid-state findings by default" {
+  let html = "<div role=\"button\" aria-checked=\"not-a-state\"></div>" +
+    "<div role=\"radio\" aria-checked=\"mixed\"></div>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(html, [
+      "aria-checked-role-incompatible", "aria-state-value-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "aria-checked-role-incompatible")
+      assert_eq(findings[1].rule_id, "aria-state-value-invalid")
+    }
+    Audited(_) =>
+      fail("incompatible and invalid values must have distinct owners")
+    ConfigurationError(_) => fail("both checked rules must be selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(html, ["aria-state-value-invalid"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 2)
+    Audited(_) =>
+      fail("selecting the established state-value rule preserves its behavior")
+    ConfigurationError(_) =>
+      fail("the established state rule must remain selectable")
+  }
+}
+
+///|
+test "listitem parentage uses recovered DOM without duplicating list child findings" {
+  let fragment = "<li>Orphan</li><ul><li>Good</li></ul><ol><li>Good</li></ol>" +
+    "<menu><li>Good</li></menu><template><li>Ignored</li></template>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, ["listitem-orphan"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("only the recovered orphan list item should report")
+    ConfigurationError(_) =>
+      fail("the orphan list item rule must be selectable")
+  }
+  let document = "<!doctype html><html><head><title>List</title></head><body><li>Orphan</li></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["listitem-orphan"]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 1)
+    Audited(_) => fail("the list-item rule must also run on complete documents")
+    ConfigurationError(_) =>
+      fail("the orphan list item rule must be selectable")
+  }
+  let recovered = "<ul><div><li>Nested orphan</li></div></ul></span>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(recovered, [
+      "list-structure-invalid", "listitem-orphan",
+    ]) {
+    Audited(FindingsWithParseErrors(findings, diagnostics)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "list-structure-invalid")
+      assert_eq(findings[1].rule_id, "listitem-orphan")
+      assert_true(diagnostics.length() > 0)
+    }
+    Audited(_) =>
+      fail("recovered DOM findings and diagnostics must remain available")
+    ConfigurationError(_) => fail("both list rules must be selectable")
+  }
+}
+
+///|
+test "fieldset legend prompt requires a direct named first legend" {
+  let html = "<fieldset><div><legend>Nested</legend></div><input><select></select></fieldset>" +
+    "<fieldset><legend> </legend><legend>Later</legend><input><select></select></fieldset>" +
+    "<fieldset><legend>First</legend><legend>Later</legend><input><select></select></fieldset>" +
+    "<fieldset><input></fieldset>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(html, ["fieldset-legend-missing"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].element_path, "fieldset:nth-of-type(1)")
+      assert_eq(findings[1].element_path, "fieldset:nth-of-type(2)")
+    }
+    Audited(_) =>
+      fail("only missing or empty direct first legends should prompt")
+    ConfigurationError(_) => fail("the fieldset legend rule must be selectable")
   }
 }

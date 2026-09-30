@@ -1328,6 +1328,33 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       wcag,
       "Zoom and viewport behavior require rendered testing.",
     ),
+    rule(
+      "aria-checked-role-incompatible",
+      "Explicit role does not support aria-checked.",
+      Aria,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/TR/wai-aria-1.2/#aria-checked",
+      "Checks aria-checked only on an effective explicit WAI-ARIA 1.2 role; native host-language semantics and other ARIA properties are outside scope.",
+    ),
+    rule(
+      "listitem-orphan",
+      "List item is not a direct child of a list container.",
+      DocumentStructure,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://html.spec.whatwg.org/multipage/grouping-content.html#the-li-element",
+      "Checks recovered li parentage only; parser recovery can change malformed source structure.",
+    ),
+    rule(
+      "fieldset-legend-missing",
+      "Fieldset grouping multiple known controls lacks a named first legend.",
+      DocumentStructure,
+      DocumentOrFragment,
+      StaticHint,
+      "https://www.w3.org/WAI/tutorials/forms/grouping/",
+      "Prompts only fieldsets with multiple known native labelable descendants; it does not prove a WCAG failure or inspect custom form association.",
+    ),
   ]
 }
 
@@ -2168,8 +2195,18 @@ fn collect_findings(
           ),
         )
       }
+      let checked_role_incompatible = has_aria_checked_incompatible_with_explicit_role(
+        child,
+      )
       if is_rule_enabled(enabled_rule_ids, "aria-state-value-invalid") &&
-        has_invalid_selected_aria_state(child) {
+        (
+          has_invalid_selected_aria_state_except_checked(child) ||
+          (
+            has_invalid_aria_checked_value(child) &&
+            !(checked_role_incompatible &&
+            is_rule_enabled(enabled_rule_ids, "aria-checked-role-incompatible"))
+          )
+        ) {
         findings.push(invalid_aria_state_value_finding(child, path))
       }
       collect_extended_aria_findings(
@@ -2477,6 +2514,32 @@ fn collect_extended_structure_findings(
       generic_finding(
         node, path, "definition-list-structure-invalid", "This direct definition-list child is not dt, dd, or an allowed grouping element.",
         "Use dt and dd (optionally grouped in div) as direct dl children.",
+      ),
+    )
+  }
+  if is_rule_enabled(enabled, "aria-checked-role-incompatible") &&
+    has_aria_checked_incompatible_with_explicit_role(node) {
+    findings.push(
+      generic_finding(
+        node, path, "aria-checked-role-incompatible", "This explicit ARIA role does not support aria-checked.",
+        "Use aria-checked only with a role that supports checked state, or use the state supported by this role.",
+      ),
+    )
+  }
+  if is_rule_enabled(enabled, "listitem-orphan") && is_orphan_listitem(node) {
+    findings.push(
+      generic_finding(
+        node, path, "listitem-orphan", "This list item is not a direct child of ul, ol, or menu.",
+        "Place li directly inside a ul, ol, or menu list container.",
+      ),
+    )
+  }
+  if is_rule_enabled(enabled, "fieldset-legend-missing") &&
+    fieldset_needs_named_legend_hint(node, context) {
+    findings.push(
+      generic_finding(
+        node, path, "fieldset-legend-missing", "This fieldset groups multiple known controls without a named first legend.",
+        "Add a non-empty first legend that describes the group of related controls.",
       ),
     )
   }
@@ -3366,6 +3429,57 @@ fn is_invalid_definition_list_child(node : @dom.Node) -> Bool {
 }
 
 ///|
+fn is_orphan_listitem(node : @dom.Node) -> Bool {
+  if node.name() != "li" {
+    return false
+  }
+  match node.parent() {
+    Some(parent) if parent.kind() is @dom.Element =>
+      !(parent.name() is ("ul" | "ol" | "menu"))
+    _ => true
+  }
+}
+
+///|
+fn has_aria_checked_incompatible_with_explicit_role(node : @dom.Node) -> Bool {
+  match (node.attrs().get("aria-checked"), primary_role(node)) {
+    (Some(_), Some(role)) =>
+      !(role
+      is ("checkbox"
+      | "menuitemcheckbox"
+      | "menuitemradio"
+      | "option"
+      | "radio"
+      | "switch"
+      | "treeitem"))
+    _ => false
+  }
+}
+
+///|
+fn fieldset_needs_named_legend_hint(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  node.name() == "fieldset" &&
+  count_known_labelable_descendants(node) > 1 &&
+  !fieldset_has_named_first_legend(node, context)
+}
+
+///|
+fn fieldset_has_named_first_legend(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  for child in node.children() {
+    if child.kind() is @dom.Element {
+      return child.name() == "legend" && has_generic_static_name(child, context)
+    }
+  }
+  false
+}
+
+///|
 fn has_zoom_disabling_viewport(node : @dom.Node) -> Bool {
   if node.name() != "meta" {
     return false
@@ -3761,7 +3875,7 @@ fn is_supported_nonzero_decimal(value : String) -> Bool {
 }
 
 ///|
-fn has_invalid_selected_aria_state(node : @dom.Node) -> Bool {
+fn has_invalid_selected_aria_state_except_checked(node : @dom.Node) -> Bool {
   has_invalid_aria_token(node, "aria-busy", is_true_false) ||
   has_invalid_aria_token(node, "aria-disabled", is_true_false) ||
   has_invalid_aria_token(node, "aria-expanded", is_true_false_or_undefined) ||
@@ -3771,7 +3885,6 @@ fn has_invalid_selected_aria_state(node : @dom.Node) -> Bool {
   has_invalid_aria_token(node, "aria-multiselectable", is_true_false) ||
   has_invalid_aria_token(node, "aria-readonly", is_true_false) ||
   has_invalid_aria_token(node, "aria-required", is_true_false) ||
-  has_invalid_aria_checked_value(node) ||
   has_invalid_aria_token(node, "aria-pressed", is_tristate) ||
   has_invalid_aria_token(node, "aria-current", is_current_token) ||
   has_invalid_aria_token(node, "aria-invalid", is_invalid_token)
