@@ -2093,3 +2093,80 @@ test "new ARIA and table findings survive recoverable parser diagnostics" {
     ConfigurationError(_) => fail("known new rules must be accepted")
   }
 }
+
+///|
+test "shared labelledby target sources name native and selected ARIA controls" {
+  let fragment = "<span id=\"author-name\" aria-label=\"Shared name\"></span>" +
+    "<input aria-labelledby=\"author-name\">" +
+    "<a href=\"/details\" aria-labelledby=\"author-name\"></a>" +
+    "<button aria-labelledby=\"author-name\"></button>" +
+    "<input type=\"button\" aria-labelledby=\"author-name\">" +
+    "<input type=\"image\" aria-labelledby=\"author-name\">" +
+    "<iframe aria-labelledby=\"author-name\"></iframe>" +
+    "<h2 aria-labelledby=\"author-name\"></h2>" +
+    "<div role=\"checkbox\" aria-checked=\"true\" aria-labelledby=\"author-name\"></div>" +
+    "<img src=\"still-needs-alt.png\" aria-labelledby=\"author-name\">"
+  let selected = [
+    "form-control-name-missing", "link-name-missing", "button-name-missing", "iframe-name-missing",
+    "heading-name-missing", "role-checkbox-name-missing", "img-alt-missing",
+  ]
+  match @a11ytrace.audit_html_fragment_with_rules(fragment, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "img-alt-missing")
+    }
+    Audited(_) =>
+      fail("shared static labelledby sources must name all supported consumers")
+    ConfigurationError(_) => fail("known name rules must be accepted")
+  }
+}
+
+///|
+test "labelledby preserves IDREF order, self labels, and aria-label fallback for static landmarks" {
+  let document = "<!doctype html><html lang=\"en\"><head><title>Page</title></head><body>" +
+    "<span id=\"first\">First</span><span id=\"second\">Second</span>" +
+    "<span id=\"file\">File</span><span id=\"empty\"></span>" +
+    "<nav aria-label=\"Fallback\" aria-labelledby=\"first second\"></nav>" +
+    "<nav aria-label=\"Fallback\" aria-labelledby=\"second first\"></nav>" +
+    "<nav id=\"self-first\" aria-label=\"Self\" aria-labelledby=\"self-first file\"></nav>" +
+    "<nav id=\"self-second\" aria-label=\"Self\" aria-labelledby=\"file self-second\"></nav>" +
+    "<nav aria-label=\"Fallback\" aria-labelledby=\"missing empty\"></nav>" +
+    "</body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(document, [
+      "navigation-landmark-name-missing", "navigation-landmark-name-duplicate",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail(
+        "ordered valid IDREFs must outrank aria-label and empty or missing targets must fall back",
+      )
+    ConfigurationError(_) => fail("known landmark rules must be accepted")
+  }
+}
+
+///|
+test "labelledby self references and cycles use bounded static target computation" {
+  let fragment = "<span id=\"file\">Report</span>" +
+    "<button id=\"delete\" aria-label=\"Delete\" aria-labelledby=\"delete file\"></button>" +
+    "<span id=\"first\" aria-labelledby=\"second\"></span>" +
+    "<span id=\"second\" aria-labelledby=\"first\"></span>" +
+    "<a href=\"/cycle\" aria-labelledby=\"first\"></a>" +
+    "<input aria-label=\"Fallback\" aria-labelledby=\"missing empty\">" +
+    "<span id=\"empty\"></span>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "button-name-missing", "link-name-missing", "form-control-name-missing",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "link-name-missing")
+      assert_eq(findings[0].element_path, "a:nth-of-type(1)")
+    }
+    Audited(_) =>
+      fail(
+        "cycles must not invent static names and valid fallbacks must remain usable",
+      )
+    ConfigurationError(_) => fail("known name rules must be accepted")
+  }
+}

@@ -65,21 +65,27 @@ explicit `<!doctype html><html …>` document when page-level checks are wanted.
 For every audited DOM, A11yTrace builds one shared context before evaluating
 rules. It indexes non-empty IDs and `label[for]` associations, skipping inert
 `template` contents. `aria-labelledby` accepts a whitespace-separated list:
-any uniquely resolved, text-bearing target supplies a static name. Empty
-values, missing targets, targets outside a supplied fragment, and duplicate-ID
-targets do not supply a name. The implementation does not recursively follow
-ARIA references, so cycles terminate safely and do not create a name. A
+uniquely resolved targets are processed in source IDREF order. For each direct
+target, the bounded static subset accepts non-empty `aria-label`, ordinary
+text/descendant image `alt`, or fallback `title`. Empty values, missing
+targets, targets outside a supplied fragment, and duplicate-ID targets do not
+supply a name. A target's own `aria-labelledby` is deliberately not followed,
+so self references and cycles terminate safely without inventing a name. A
 duplicate non-empty ID reports every occurrence after the first in the audited
 input scope.
 
 The context deliberately separates a target being uniquely present from it
-having static text. This lets an existing but empty `aria-describedby` target
-remain a valid relationship while an `aria-labelledby` target with no static
-text fails to establish a name. Directly referenced static text is accepted
-even when markup has `hidden` or `aria-hidden`, because this library does not
-compute CSS or the browser accessibility tree. It does not yet implement
-IDREF-derived text alternatives, ARIA name precedence, shadow-DOM lookup, or
-the full Accessible Name and Description Computation.
+having a supported static name. This lets an existing but empty
+`aria-describedby` target remain a valid relationship while an
+`aria-labelledby` target with no supported name fails to establish a name.
+The subset gives a usable `aria-labelledby` result precedence over `aria-label`
+and the checked native/content/title fallbacks; all affected name rules share
+that order. Directly referenced static text is accepted even when markup has
+`hidden` or `aria-hidden`, because this library does not compute CSS or the
+browser accessibility tree. It follows the relevant ordering ideas in [W3C
+Accessible Name and Description Computation 1.2](https://www.w3.org/TR/accname-1.2/),
+but does not implement generated content, CSS visibility, shadow DOM, slots,
+embedded controls, host-language AAM details, or the full traversal algorithm.
 
 Parser recovery still produces a recovered DOM and diagnostics. The context is
 built from that recovered DOM; callers should review parser diagnostics before

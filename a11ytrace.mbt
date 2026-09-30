@@ -2639,10 +2639,10 @@ fn role_name_rule_id(role : String) -> String? {
 
 ///|
 fn has_generic_static_name(node : @dom.Node, context : AuditContext) -> Bool {
+  has_name_from_labelledby(node, context) ||
+  has_nonempty_attribute(node, "aria-label") ||
   has_nonempty_visible_text(node) ||
   has_nonempty_image_alt(node) ||
-  has_nonempty_attribute(node, "aria-label") ||
-  has_name_from_labelledby(node, context) ||
   has_nonempty_attribute(node, "title")
 }
 
@@ -2656,8 +2656,8 @@ fn has_role_static_name(
   // exposed as part of the graphic only in browser-specific cases, so it must
   // not suppress a definite static missing-name signal here.
   if role == "img" {
-    return has_nonempty_attribute(node, "aria-label") ||
-      has_name_from_labelledby(node, context) ||
+    return has_name_from_labelledby(node, context) ||
+      has_nonempty_attribute(node, "aria-label") ||
       has_nonempty_attribute(node, "title")
   }
   has_generic_static_name(node, context)
@@ -2912,17 +2912,22 @@ fn static_name_from_labelledby(
   match node.attrs().get("aria-labelledby") {
     Some(Some(value)) => {
       let output = StringBuilder()
-      for id in idref_tokens(value) {
+      // Keep IDREF order because it determines the resulting flat name. This
+      // deliberately does not recursively follow a referenced node's own
+      // aria-labelledby: the full traversal/visited-node algorithm requires
+      // browser semantics and is outside this static subset.
+      for id in labelledby_idref_tokens(value) {
         match context.id_nodes.get(id) {
-          Some([target]) => {
-            let text = static_text_content(target)
-            if !text.trim().is_empty() {
-              if !output.to_string().is_empty() {
-                output.write_string(" ")
+          Some([target]) =>
+            match static_name_from_labelledby_target(target) {
+              Some(text) => {
+                if !output.to_string().is_empty() {
+                  output.write_string(" ")
+                }
+                output.write_string(text)
               }
-              output.write_string(text.trim().to_owned())
+              None => ()
             }
-          }
           _ => ()
         }
       }
@@ -2934,6 +2939,25 @@ fn static_name_from_labelledby(
       }
     }
     _ => None
+  }
+}
+
+///|
+fn static_name_from_labelledby_target(node : @dom.Node) -> String? {
+  match node.attrs().get("aria-label") {
+    Some(Some(value)) if !value.trim().is_empty() =>
+      Some(value.trim().to_owned())
+    _ => {
+      let text = static_text_content(node).trim().to_owned()
+      if !text.is_empty() {
+        return Some(text)
+      }
+      match node.attrs().get("title") {
+        Some(Some(value)) if !value.trim().is_empty() =>
+          Some(value.trim().to_owned())
+        _ => None
+      }
+    }
   }
 }
 
@@ -3194,10 +3218,10 @@ fn has_recognizable_heading_name(
   heading : @dom.Node,
   context : AuditContext,
 ) -> Bool {
+  has_name_from_labelledby(heading, context) ||
+  has_nonempty_attribute(heading, "aria-label") ||
   has_nonempty_visible_text(heading) ||
   has_nonempty_image_alt(heading) ||
-  has_nonempty_attribute(heading, "aria-label") ||
-  has_name_from_labelledby(heading, context) ||
   has_potential_svg_name_source(heading)
 }
 
@@ -3242,10 +3266,10 @@ fn has_recognizable_button_name(
 ) -> Bool {
   match button.name() {
     "button" =>
+      has_name_from_labelledby(button, context) ||
+      has_nonempty_attribute(button, "aria-label") ||
       has_nonempty_visible_text(button) ||
       has_nonempty_image_alt(button) ||
-      has_nonempty_attribute(button, "aria-label") ||
-      has_name_from_labelledby(button, context) ||
       has_nonempty_attribute(button, "title") ||
       has_potential_svg_name_source(button)
     "input" =>
@@ -3253,14 +3277,14 @@ fn has_recognizable_button_name(
         Some(Some(type_)) =>
           match type_.trim().to_lower() {
             "button" =>
-              has_nonempty_attribute(button, "value") ||
-              has_nonempty_attribute(button, "aria-label") ||
               has_name_from_labelledby(button, context) ||
+              has_nonempty_attribute(button, "aria-label") ||
+              has_nonempty_attribute(button, "value") ||
               has_nonempty_attribute(button, "title")
             "image" =>
-              has_nonempty_attribute(button, "alt") ||
-              has_nonempty_attribute(button, "aria-label") ||
               has_name_from_labelledby(button, context) ||
+              has_nonempty_attribute(button, "aria-label") ||
+              has_nonempty_attribute(button, "alt") ||
               has_nonempty_attribute(button, "title")
             _ => false
           }
@@ -3340,10 +3364,10 @@ fn has_recognizable_iframe_name(
 
 ///|
 fn has_recognizable_link_name(link : @dom.Node, context : AuditContext) -> Bool {
+  has_name_from_labelledby(link, context) ||
+  has_nonempty_attribute(link, "aria-label") ||
   has_nonempty_visible_text(link) ||
   has_nonempty_image_alt(link) ||
-  has_nonempty_attribute(link, "aria-label") ||
-  has_name_from_labelledby(link, context) ||
   has_nonempty_attribute(link, "title") ||
   has_potential_svg_name_source(link)
 }
@@ -3423,11 +3447,11 @@ fn has_recognizable_form_control_name(
   control : @dom.Node,
   context : AuditContext,
 ) -> Bool {
-  has_nonempty_attribute(control, "aria-label") ||
-  has_nonempty_attribute(control, "title") ||
   has_name_from_labelledby(control, context) ||
+  has_nonempty_attribute(control, "aria-label") ||
   has_explicit_label(control, context) ||
-  has_wrapping_label(control)
+  has_wrapping_label(control) ||
+  has_nonempty_attribute(control, "title")
 }
 
 ///|
@@ -3443,17 +3467,7 @@ fn has_name_from_labelledby(
   control : @dom.Node,
   context : AuditContext,
 ) -> Bool {
-  match control.attrs().get("aria-labelledby") {
-    Some(Some(value)) => {
-      for id in idref_tokens(value) {
-        if indexed_id_has_static_text(context, id) {
-          return true
-        }
-      }
-      false
-    }
-    _ => false
-  }
+  static_name_from_labelledby(control, context) is Some(_)
 }
 
 ///|
@@ -3475,11 +3489,20 @@ fn idref_tokens(value : String) -> Array[String] {
 }
 
 ///|
-fn indexed_id_has_static_text(context : AuditContext, id : String) -> Bool {
-  match context.id_nodes.get(id) {
-    Some([target]) => has_nonempty_visible_text(target)
-    _ => false
+fn labelledby_idref_tokens(value : String) -> Array[String] {
+  let normalized = value
+    .replace_all(old="\t", new=" ")
+    .replace_all(old="\n", new=" ")
+    .replace_all(old="\r", new=" ")
+    .replace_all(old="\u{000C}", new=" ")
+  let tokens : Array[String] = []
+  for token in normalized.split(" ") {
+    let id = token.trim()
+    if !id.is_empty() {
+      tokens.push(id.to_owned())
+    }
   }
+  tokens
 }
 
 ///|
