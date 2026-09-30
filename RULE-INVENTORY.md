@@ -2,7 +2,7 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **77 selectable metadata IDs**, comprising **46 confirmed-finding
+there are **79 selectable metadata IDs**, comprising **48 confirmed-finding
 checks**, **7 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -23,7 +23,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | heading-level-skipped | original | static hint | later native heading drops two+ levels | 2.4.6 review practice | C/O | only reports downward native heading level skips |
 | heading-name-missing | original | confirmed | native heading lacks supported name | 2.4.6 | C/O | reports empty headings and ignores template headings |
 | document-title-missing | original | confirmed | complete document has no non-empty title | 2.4.2 | C/O | reports missing document title and language only for complete documents |
-| html-lang-missing | original | confirmed | complete-document `html` has no non-empty `lang` | 3.1.1 | C/O | reports missing document title and language only for complete documents |
+| html-lang-missing | original | confirmed | complete-document `html` has no non-empty `lang` | 3.1.1 | C/O | reports missing document title and language only for complete documents; empty values do not duplicate invalid-tag findings |
 | iframe-name-missing | original | confirmed | iframe has no title/ARIA static name | 4.1.2 | C/O | recognizes supported iframe names and reports missing or unresolved names |
 | duplicate-id | original | confirmed | later non-empty duplicate ID in input scope | 4.1.1 historical / relationship practice | C/O | indexes duplicate IDs once and keeps ambiguous references unnamed |
 | reference-target-invalid | original | confirmed | label-for/labelledby/describedby has missing/ambiguous ID | 1.3.1, 4.1.2 | C/O | reports invalid label and ARIA references without claiming names are missing |
@@ -79,7 +79,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | pointer-cancellation-review | new | manual review | `onmousedown` or `onpointerdown` exists | 2.5.2 | ER | detailed review rules locate static risk markers without claiming findings |
 | motion-actuation-review | new | manual review | device-motion/orientation event attribute exists | 2.5.4 | ER | detailed review rules locate static risk markers without claiming findings |
 | label-in-name-review | new | manual review | non-empty aria-label and visible text | 2.5.3 | ER | remaining review markers have specific triggers and clean markup has none |
-| language-of-parts-review | new | manual review | non-html element has non-empty lang | 3.1.2 | ER | remaining review markers have specific triggers and clean markup has none |
+| language-of-parts-review | new | manual review | non-empty `lang` in supplied fragment or complete-document body subtree | 3.1.2 | ER | known-tag markup still needs actual language, inheritance, and exception review |
 | on-focus-context-review | new | manual review | `onfocus` exists | 3.2.1 | ER | remaining review markers have specific triggers and clean markup has none |
 | on-input-context-review | new | manual review | selected form control has `onchange` | 3.2.2 | ER | detailed review rules locate static risk markers without claiming findings |
 | form-error-review | new | manual review | form element | 3.3.1/3.3.3/3.3.4 | ER | detailed review rules locate static risk markers without claiming findings |
@@ -93,6 +93,8 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | listitem-orphan | next version | confirmed | recovered `li` direct parent is not ul/ol/menu | HTML list content-model practice; not a per-instance WCAG verdict | ES/H | reports a root orphan and accepts menu child; template contents are skipped |
 | fieldset-legend-missing | next version | static hint | fieldset with multiple known native labelable descendants has no named first legend | form grouping best practice | ES/H | accepts a named first legend and one-control fieldset; reports empty/missing first legend |
 | aria-role-attribute-incompatible | next version | confirmed | selected defined ARIA property is unsupported by a modeled effective explicit WAI-ARIA 1.2 role | 4.1.2 static semantic-markup evidence | EA/H | role attribute compatibility uses its small inherited and global-property table; JSON keeps dedicated checked findings distinct |
+| html-lang-invalid | next version | confirmed | complete-document non-empty `html[lang]` has unknown primary language subtag or obvious separator/character failure | 3.1.1 static ACT evidence | C/H | language-tag checks accept ACT known-primary examples without strict later-subtag parsing |
+| element-lang-invalid | next version | confirmed | non-empty explicit `lang` in fragment or complete-document body subtree has unknown primary language subtag or obvious separator/character failure | 3.1.2 partial static ACT evidence | C/H | element language tags respect document-body and fragment scope; JSON preserves diagnostics/order |
 
 The role-name rows are catalogued as confirmed-finding rules because a definite
 missing author/static name produces a `Finding`; their SVG-only branch produces

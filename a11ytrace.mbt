@@ -897,6 +897,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "Checks attribute-name membership only; it does not validate role permission or attribute values.",
     ),
     rule(
+      "element-lang-invalid",
+      "Content element lang lacks a known primary language subtag.",
+      DocumentStructure,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/WAI/standards-guidelines/act/rules/de46e4/",
+      "Checks only a non-empty explicit lang value in supplied fragment markup or the recovered body subtree of a complete document; it cannot establish inherited text, flat-tree scope, visibility, or the actual human language.",
+    ),
+    rule(
       "role-value-invalid",
       "Role token list has no concrete WAI-ARIA 1.2 fallback role.",
       Aria,
@@ -1364,6 +1373,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "https://www.w3.org/TR/wai-aria-1.2/#state_prop_values",
       "Checks only the documented explicit-role/property pairs in A11yTrace's limited WAI-ARIA 1.2 table; global attributes, unmodeled roles/properties, native form controls, and host-language constraints are outside scope.",
     ),
+    rule(
+      "html-lang-invalid",
+      "Complete document html lang lacks a known primary language subtag.",
+      DocumentStructure,
+      Document,
+      ConfirmedFinding,
+      "https://www.w3.org/WAI/standards-guidelines/act/rules/html-page-lang-valid-bf051a/",
+      "Checks a non-empty static lang value against the generated IANA primary-language set and basic separator shape only; it does not infer the page language or validate later BCP 47 subtags.",
+    ),
   ]
 }
 
@@ -1772,17 +1790,17 @@ fn wcag_criteria_catalog() -> Array[WcagCriterion] {
       A,
       true,
       PartialAutomatic,
-      ["html-lang-missing"],
-      "Verify the non-empty lang value accurately identifies the default language.",
+      ["html-lang-missing", "html-lang-invalid"],
+      "Verify the non-empty lang value accurately identifies the default language and page context.",
     ),
     wcag_entry(
       "3.1.2",
       "Language of Parts",
       AA,
       true,
-      ManualReview,
-      [],
-      "Review passages in another human language and verify accurate lang changes where exceptions do not apply.",
+      PartialAutomatic,
+      ["element-lang-invalid"],
+      "Review passages in another human language and verify accurate lang changes, inherited text, and exceptions where they apply.",
     ),
     wcag_entry(
       "3.2.1",
@@ -2156,11 +2174,21 @@ fn collect_findings(
           !has_nonempty_attribute(child, "lang") {
           findings.push(missing_html_lang_finding(child, path))
         }
+        if is_rule_enabled(enabled_rule_ids, "html-lang-invalid") &&
+          has_nonempty_attribute(child, "lang") &&
+          !has_known_primary_language_tag(child) {
+          findings.push(invalid_html_lang_finding(child, path))
+        }
         if is_rule_enabled(enabled_rule_ids, "document-title-missing") &&
           !context.page_has_nonempty_title &&
           context.first_page_title_path is None {
           findings.push(missing_document_title_finding(child, path))
         }
+      }
+      if is_rule_enabled(enabled_rule_ids, "element-lang-invalid") &&
+        is_element_lang_in_audited_content_scope(child, context) &&
+        !has_known_primary_language_tag(child) {
+        findings.push(invalid_element_lang_finding(child, path))
       }
       if context.is_document &&
         name == "body" &&
@@ -2224,7 +2252,9 @@ fn collect_findings(
       collect_extended_structure_findings(
         child, path, findings, enabled_rule_ids, context,
       )
-      collect_extended_review_items(child, path, review_items, enabled_rule_ids)
+      collect_extended_review_items(
+        child, path, review_items, enabled_rule_ids, context,
+      )
       if context.is_document &&
         is_rule_enabled(enabled_rule_ids, "meta-refresh-delay") &&
         has_supported_nonzero_meta_refresh_delay(child) {
@@ -2594,6 +2624,7 @@ fn collect_extended_review_items(
   path : String,
   reviews : Array[ReviewItem],
   enabled : Array[String],
+  context : AuditContext,
 ) -> Unit {
   if node.name() is ("audio" | "video") {
     add_review_if_enabled(
@@ -2657,7 +2688,7 @@ fn collect_extended_review_items(
       reviews, enabled, "label-in-name-review", node, path, "Compare the visible label with the browser-computed accessible name; visible text should be included.",
     )
   }
-  if node.name() != "html" && has_nonempty_attribute(node, "lang") {
+  if is_element_lang_in_audited_content_scope(node, context) {
     add_review_if_enabled(
       reviews, enabled, "language-of-parts-review", node, path, "Verify this lang value accurately marks a changed human language when WCAG exceptions do not apply.",
     )
@@ -4096,6 +4127,80 @@ fn has_form_ancestor(node : @dom.Node) -> Bool {
 }
 
 ///|
+fn is_element_lang_in_audited_content_scope(
+  node : @dom.Node,
+  context : AuditContext,
+) -> Bool {
+  if node.name() == "html" || !has_nonempty_attribute(node, "lang") {
+    return false
+  }
+  !context.is_document || has_body_ancestor_or_self(node)
+}
+
+///|
+fn has_body_ancestor_or_self(node : @dom.Node) -> Bool {
+  if node.name() == "body" {
+    return true
+  }
+  let mut ancestor = node.parent()
+  while ancestor is Some(parent) {
+    if parent.kind() is @dom.Element && parent.name() == "body" {
+      return true
+    }
+    ancestor = parent.parent()
+  }
+  false
+}
+
+///|
+fn has_known_primary_language_tag(node : @dom.Node) -> Bool {
+  match node.attrs().get("lang") {
+    Some(Some(value)) => has_known_primary_language_tag_value(value)
+    _ => false
+  }
+}
+
+///|
+fn has_known_primary_language_tag_value(value : String) -> Bool {
+  let tag = value.trim()
+  if tag.is_empty() ||
+    has_obviously_malformed_language_tag_shape(tag.to_owned()) {
+    return false
+  }
+  let mut primary = ""
+  for subtag in tag.split("-") {
+    primary = subtag.to_owned()
+    break
+  }
+  has_iana_registered_primary_language_subtag(primary)
+}
+
+///|
+fn has_obviously_malformed_language_tag_shape(tag : String) -> Bool {
+  let mut subtag_length = 0
+  for character in tag.to_array() {
+    if character == '-' {
+      if subtag_length == 0 {
+        return true
+      }
+      subtag_length = 0
+    } else if !is_ascii_alphanumeric(character) {
+      return true
+    } else {
+      subtag_length = subtag_length + 1
+    }
+  }
+  subtag_length == 0
+}
+
+///|
+fn is_ascii_alphanumeric(character : Char) -> Bool {
+  (character >= 'a' && character <= 'z') ||
+  (character >= 'A' && character <= 'Z') ||
+  (character >= '0' && character <= '9')
+}
+
+///|
 fn has_recognizable_button_name(
   button : @dom.Node,
   context : AuditContext,
@@ -4687,6 +4792,30 @@ fn missing_html_lang_finding(node : @dom.Node, path : String) -> Finding {
     rule_id: "html-lang-missing",
     message: "This HTML document has no non-empty lang attribute on its html element.",
     suggestion: "Add a non-empty lang attribute to the document's <html> element, such as lang=\"en\".",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn invalid_html_lang_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "html-lang-invalid",
+    message: "This document html lang attribute has no known primary language subtag or has an obviously malformed separator.",
+    suggestion: "Use a language tag beginning with an IANA-registered primary subtag, such as en, zh-Hans, or fr-CH.",
+    element_path: path,
+    line: node.origin_line(),
+    column: node.origin_col(),
+  }
+}
+
+///|
+fn invalid_element_lang_finding(node : @dom.Node, path : String) -> Finding {
+  {
+    rule_id: "element-lang-invalid",
+    message: "This explicit lang attribute has no known primary language subtag or has an obviously malformed separator.",
+    suggestion: "Use a language tag beginning with an IANA-registered primary subtag, such as en, zh-Hans, or fr-CH.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

@@ -14,7 +14,7 @@ item when static markup contains a relevant trigger, or needs the listed
 procedure; **Not assessed** has no reliable static trigger in this release.
 `4.1.1` is retained only as WCAG 2.1 history: it was removed in WCAG 2.2.
 
-Current directory totals: **56** records = **9 partial automatic**, **33
+Current directory totals: **56** records = **10 partial automatic**, **32
 manual review**, **13 not assessed**, and **1 removed in WCAG 2.2**. The 55
 records marked present in WCAG 2.2 are the current A/AA set; the removed record
 is never included as a current WCAG 2.2 requirement.
@@ -54,8 +54,8 @@ is never included as a current WCAG 2.2 requirement.
 | 2.5.1–2.5.4 Pointer/Gesture/Label/Motion | A | both | Manual review | Use the corresponding pointer, label-in-name, and motion review items. |
 | 2.5.7 Dragging Movements | AA | 2.2+ | Manual review | `dragging-movement-review`; verify a non-drag alternative. |
 | 2.5.8 Target Size | AA | 2.2+ | Manual review | `target-size-review`; measure CSS pixels and exceptions. |
-| 3.1.1 Language of Page | A | both | Partial automatic | `html-lang-missing`; review accuracy of the language tag. |
-| 3.1.2 Language of Parts | AA | both | Manual review | `language-of-parts-review`; review actual language changes/exceptions. |
+| 3.1.1 Language of Page | A | both | Partial automatic | `html-lang-missing`, `html-lang-invalid`; review actual default language and page context. |
+| 3.1.2 Language of Parts | AA | both | Partial automatic | `element-lang-invalid` plus `language-of-parts-review`; review actual human-language changes, inheritance, visibility, flat-tree scope, and exceptions. |
 | 3.2.1 On Focus / 3.2.2 On Input | A | both | Manual review | Use context-change review items and run the interaction. |
 | 3.2.3/3.2.4 Consistency | AA | both | Not assessed | Compare a page set, not a single input. |
 | 3.2.6 Consistent Help | A | 2.2+ | Not assessed | Compare repeated help mechanisms across a flow. |

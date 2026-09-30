@@ -528,7 +528,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 77)
+  assert_eq(rules.length(), 79)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[21].id, "meta-refresh-delay")
   assert_eq(rules[22].id, "aria-state-value-invalid")
@@ -594,6 +594,25 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("role attribute compatibility metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("html-lang-invalid") {
+    Some(rule) => {
+      assert_true(rule.category is @a11ytrace.RuleCategory::DocumentStructure)
+      assert_true(rule.scope is @a11ytrace.RuleScope::Document)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("document language metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("element-lang-invalid") {
+    Some(rule) => {
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+    }
+    None => fail("content language metadata must be available")
   }
   assert_true(@a11ytrace.rule_metadata("not-a-rule") is None)
   let content_ids = @a11ytrace.content_rule_ids()
@@ -969,7 +988,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 77)
+  assert_eq(rule_ids.length(), 79)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[4], "heading-level-skipped")
   assert_eq(rule_ids[5], "heading-name-missing")
@@ -997,6 +1016,8 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("listitem-orphan"))
   assert_true(rule_ids.contains("fieldset-legend-missing"))
   assert_true(rule_ids.contains("aria-role-attribute-incompatible"))
+  assert_true(rule_ids.contains("html-lang-invalid"))
+  assert_true(rule_ids.contains("element-lang-invalid"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -1029,7 +1050,7 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       item.coverage_status is @a11ytrace.WcagCoverageStatus::PartialAutomatic
     })
     .length(),
-    9,
+    10,
   )
   assert_eq(
     criteria
@@ -1037,7 +1058,7 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       item.coverage_status is @a11ytrace.WcagCoverageStatus::ManualReview
     })
     .length(),
-    33,
+    32,
   )
   assert_eq(
     criteria
@@ -1075,6 +1096,16 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       )
     }
     None => fail("WCAG 2.2 AA addition must be documented")
+  }
+  match @a11ytrace.wcag_criterion("3.1.2") {
+    Some(criterion) => {
+      assert_true(
+        criterion.coverage_status
+        is @a11ytrace.WcagCoverageStatus::PartialAutomatic,
+      )
+      assert_true(criterion.rule_ids.contains("element-lang-invalid"))
+    }
+    None => fail("language-of-parts coverage must retain its partial boundary")
   }
   let result = @a11ytrace.audit_html_with_wcag_coverage("<p>Clean-looking</p>")
   assert_eq(result.audit.findings.length(), 0)
@@ -3041,5 +3072,121 @@ test "role attribute compatibility keeps specialized checked and JSON findings d
       fail("selecting the established checked rule keeps its behavior")
     ConfigurationError(_) =>
       fail("the established checked rule must remain selectable")
+  }
+}
+
+///|
+test "language-tag checks accept ACT known-primary examples without strict later-subtag parsing" {
+  let page = "<!doctype html><html lang=\"EN\"><head><title>Languages</title></head><body>" +
+    "<p lang=\"zh-Hans\">中文</p><p lang=\"fr-CH\">Bonjour</p>" +
+    "<p lang=\"en-US-GB\">English</p><p lang=\"de-hello\">Deutsch</p></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(page, [
+      "html-lang-invalid", "element-lang-invalid",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) => fail("known primary language subtags must be accepted")
+    ConfigurationError(_) => fail("language-tag rules must be selectable")
+  }
+}
+
+///|
+test "language-tag checks report unknown primaries and obvious separators without owning empty values" {
+  let page = "<!doctype html><html lang=\"em-US\"><head><title>Languages</title></head><body>" +
+    "<p lang=\"eng\">Legacy code</p><p lang=\"en--US\">Malformed</p>" +
+    "<p lang=\"en_US\">Malformed</p><p lang=\" \">Empty remains outside this rule</p></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(page, [
+      "html-lang-invalid", "element-lang-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].rule_id, "html-lang-invalid")
+      assert_eq(findings[1].rule_id, "element-lang-invalid")
+      assert_eq(findings[2].rule_id, "element-lang-invalid")
+      assert_eq(findings[3].rule_id, "element-lang-invalid")
+    }
+    Audited(_) =>
+      fail("unknown primary subtags and malformed separators must report")
+    ConfigurationError(_) => fail("language-tag rules must be selectable")
+  }
+  let empty_page = "<!doctype html><html lang=\" \"><head><title>Languages</title></head><body></body></html>"
+  match
+    @a11ytrace.audit_html_with_rules(empty_page, [
+      "html-lang-missing", "html-lang-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "html-lang-missing")
+    }
+    Audited(_) =>
+      fail("empty html lang must keep the existing missing-rule owner")
+    ConfigurationError(_) =>
+      fail("existing and new language rules must be selectable")
+  }
+}
+
+///|
+test "element language tags respect document-body and fragment scope" {
+  let document = "<!doctype html><html lang=\"en\"><head><title lang=\"unknown\">Title</title></head>" +
+    "<body><p lang=\"unknown\">Body text</p><template><p lang=\"unknown\">Ignored</p></template></body></html>"
+  match @a11ytrace.audit_html_with_rules(document, ["element-lang-invalid"]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(
+        findings[0].element_path,
+        "html:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)",
+      )
+    }
+    Audited(_) =>
+      fail(
+        "only recovered body-subtree language markup should report in documents",
+      )
+    ConfigurationError(_) => fail("element language rule must be selectable")
+  }
+  match
+    @a11ytrace.audit_html_fragment_with_rules(
+      "<p lang=\"unknown\">Component</p>",
+      ["html-lang-invalid", "element-lang-invalid"],
+    ) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 1)
+      assert_eq(findings[0].rule_id, "element-lang-invalid")
+      assert_eq(findings[0].element_path, "p:nth-of-type(1)")
+    }
+    Audited(_) =>
+      fail("fragments must audit local element markup but not page html lang")
+    ConfigurationError(_) => fail("language-tag rules must be selectable")
+  }
+}
+
+///|
+test "language-tag findings preserve diagnostics document order and JSON" {
+  let fragment = "<img src=\"missing.png\"><p lang=\"unknown\">Text</p></span>"
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(fragment, [
+      "img-alt-missing", "element-lang-invalid",
+    ]) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ =>
+      fail("selected language and image rules must audit recovered fragments")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].rule_id, "img-alt-missing")
+  assert_eq(detailed.findings[1].rule_id, "element-lang-invalid")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [{ "rule_id": String(first), .. }, { "rule_id": String(second), .. }]
+      ),
+      "parse_diagnostics": Array([_, ..]),
+      ..
+    } => {
+      assert_eq(first, "img-alt-missing")
+      assert_eq(second, "element-lang-invalid")
+    }
+    _ =>
+      fail("detailed JSON must retain language findings and parser diagnostics")
   }
 }

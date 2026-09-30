@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 77 stable IDs include confirmed static findings, structural hints, and
+The 79 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 77
-selectable IDs separately as 46 confirmed-finding checks, 7 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 79
+selectable IDs separately as 48 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -109,11 +109,41 @@ rule.
 
 For a complete document input, reports when the document `<html>` element lacks
 a non-empty `lang` attribute. It checks presence and non-whitespace content
-only; it does not validate language-tag syntax, determine language changes in
-descendants, or infer a language from text.
+only; `html-lang-invalid` owns non-empty known-primary checks, so blank values
+never receive duplicate findings. Neither rule determines language changes in
+descendants or infers a language from text.
 
 It is informed by [WCAG Understanding Success Criterion 3.1.1: Language of
 Page](https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html).
+
+## `html-lang-invalid`
+
+For complete document input only, reports a non-empty `<html lang>` whose first
+hyphen-separated primary subtag is not in A11yTrace's fixed IANA `Type:
+language` data, or whose separator/character shape is clearly malformed. It
+accepts `EN`, `zh-Hans`, `fr-CH`, and known-primary values with loose later
+subtags such as `de-hello`; it does not reject a tag merely because a later
+subtag does not meet strict BCP 47 grammar.
+
+This is the narrow static evidence in the [W3C ACT page-language rule](https://www.w3.org/WAI/standards-guidelines/act/rules/html-page-lang-valid-bf051a/).
+It cannot establish the top-level browsing context, actual default text
+language, HTTP/meta alternatives, CSS/flat-tree behavior, or browser and
+assistive-technology handling. See [LANGUAGE-SUBTAGS.md](LANGUAGE-SUBTAGS.md)
+for the generated IANA data date and update process.
+
+## `element-lang-invalid`
+
+Reports a non-empty explicit `lang` on an element in a supplied fragment, or
+in the recovered `<body>` subtree of a complete document, when the same known-
+primary/obvious-shape test fails. It does not check `<html>` itself, empty
+values, `<head>` markup, or inert template contents. Empty document root
+values remain the `html-lang-missing` rule's responsibility.
+
+The rule is informed by the [W3C ACT element-language rule](https://www.w3.org/WAI/standards-guidelines/act/rules/de46e4/), but static parsing cannot prove
+whether text inherits from the element, whether the markup is in the browser
+flat tree or visible, whether it denotes a human-language change, or whether a
+WCAG exception applies. `language-of-parts-review` remains a separate manual
+review item for those questions.
 
 ## `iframe-name-missing`
 

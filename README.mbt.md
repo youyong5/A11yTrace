@@ -4,11 +4,11 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 
 ## Current development checkout
 
-This next-version checkout provides 77 selectable built-in IDs, deliberately
-separated into 46 confirmed Finding checks, 7 static hints, and 24 ReviewItem
+This next-version checkout provides 79 selectable built-in IDs, deliberately
+separated into 48 confirmed Finding checks, 7 static hints, and 24 ReviewItem
 triggers. That directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
-2.2): 9 are partially checked from static HTML, 33 have manual-review steps,
+2.2): 10 are partially checked from static HTML, 32 have manual-review steps,
 and 13 are not assessed. Zero findings never means WCAG conformance.
 
 For detailed JSON, `assessment` is `findings`, `needs_review`,
@@ -130,7 +130,7 @@ criterion, the version difference, mappings, and the required review step.
 "criteria": […coverage records…]}`. Each criterion uses the stable
 `coverage_status` strings `partial_automatic`, `manual_review`,
 `not_assessed`, or `removed_in_wcag22`; none is a pass status.
-The current directory has 56 records: 9 partial-automatic, 33 manual-review,
+The current directory has 56 records: 10 partial-automatic, 32 manual-review,
 13 not-assessed, and the one WCAG 2.1 historical record removed in WCAG 2.2.
 
 ## HTML fragment audit
@@ -234,7 +234,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 77 independently selectable checks and review
+The rule directory now has 79 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -273,7 +273,7 @@ for each modeled row and excluded role.
 
 `heading-level-skipped` suggests reviewing a native heading that jumps down two or more levels from the preceding heading; the first heading may start at any level. `heading-name-missing` reports empty native headings unless supported text, image alt, or ARIA naming is present. Neither rule infers headings from visual styling or implements a complete browser Accessible Name algorithm.
 
-`document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
+`document-title-missing` and `html-lang-missing` apply only to complete-document input and require a non-empty head `<title>` and `<html lang>` respectively. `html-lang-invalid` separately checks a non-empty document `html[lang]` for a known IANA primary language subtag; it does not duplicate an empty-value Finding. `element-lang-invalid` checks a non-empty explicit `lang` in a complete document's recovered body subtree or supplied fragment. Both accept known-primary values such as `EN`, `zh-Hans`, `fr-CH`, and even loose later subtags such as `de-hello`; they reject an unknown primary or obvious empty/non-alphanumeric separator. They do not infer the language of text, flat-tree scope, CSS visibility, inheritance, or WCAG language exceptions, so `language-of-parts-review` remains necessary. See [LANGUAGE-SUBTAGS.md](LANGUAGE-SUBTAGS.md) for the fixed IANA data, update record, and limitations. `iframe-name-missing` accepts a non-empty `title`, `aria-label`, or resolvable text-bearing `aria-labelledby` target. `duplicate-id` reports later repeated non-empty IDs in the same audited input scope; duplicated IDs are deliberately not trusted for ARIA or label resolution.
 
 `reference-target-invalid` reports missing or ambiguous non-empty targets used by `label[for]`, `aria-labelledby`, or `aria-describedby`; it does not call a separately named control “unnamed” merely because one of its references is invalid. `label-for-target-not-labelable` separately reports only a unique `label[for]` target that is a known non-labelable built-in HTML element, such as a `div` or hidden input; it accepts button, non-hidden input, meter, output, progress, select, and textarea, and skips custom elements because form association is not statically knowable. `label-multiple-labelable-descendants` reports each label once when it contains two or more known built-in labelable descendants; explicit `for` does not exempt a second descendant, while hidden inputs, template contents, and unknown custom elements are not counted. These are definite HTML association/content-model findings, not per-instance WCAG conclusions. `table-headers-invalid` checks that each `headers` token resolves to another unique `td` or `th` in the same nearest table. `area-alt-missing` requires non-empty `alt` on an `<area href>`; an area without `href` is outside that rule.
 
