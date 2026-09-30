@@ -2355,6 +2355,67 @@ test "radio required state and values distinguish custom and native markup" {
 }
 
 ///|
+test "scrollbar required properties distinguish missing values and invalid IDREFs" {
+  let selected = ["aria-required-property-missing", "aria-idref-invalid"]
+  let markup = "<div id=\"viewport\"></div>" +
+    "<div role=\"scrollbar\" aria-valuenow=\"3\"></div>" +
+    "<div role=\"scrollbar\" aria-controls=\"viewport\"></div>" +
+    "<div role=\"scrollbar\"></div>" +
+    "<div role=\"scrollbar\" aria-controls=\"viewport\" aria-valuenow=\"0\"></div>" +
+    "<div role=\"scrollbar\" aria-controls=\"missing\" aria-valuenow=\"5\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 4)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(
+        findings[0].message,
+        "This scrollbar role omits required aria-controls.",
+      )
+      assert_eq(findings[1].rule_id, "aria-required-property-missing")
+      assert_eq(
+        findings[1].message,
+        "This scrollbar role omits required aria-valuenow.",
+      )
+      assert_eq(findings[2].rule_id, "aria-required-property-missing")
+      assert_eq(
+        findings[2].message,
+        "This scrollbar role omits required aria-controls and aria-valuenow.",
+      )
+      assert_eq(findings[3].rule_id, "aria-idref-invalid")
+    }
+    Audited(_) =>
+      fail("scrollbar required properties and IDREFs must be distinct")
+    ConfigurationError(_) => fail("selected scrollbar rules must be accepted")
+  }
+}
+
+///|
+test "scrollbar requirements use role fallback and leave spinbutton defaults alone" {
+  let selected = ["aria-required-property-missing"]
+  let markup = "<div role=\"future-role scrollbar\" aria-controls=\"target\"></div>" +
+    "<div role=\"spinbutton\"></div><div role=\"slider\" aria-valuenow=\"1\"></div>" +
+    "<div role=\"combobox\"></div>"
+  match @a11ytrace.audit_html_fragment_with_rules(markup, selected) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 2)
+      assert_eq(findings[0].rule_id, "aria-required-property-missing")
+      assert_eq(
+        findings[0].message,
+        "This scrollbar role omits required aria-valuenow.",
+      )
+      assert_eq(findings[1].rule_id, "aria-required-property-missing")
+      assert_eq(
+        findings[1].message,
+        "This ARIA role omits a required state or property.",
+      )
+    }
+    Audited(_) => fail("only scrollbar and existing selected roles must report")
+    ConfigurationError(_) =>
+      fail("the required-property rule must be selectable")
+  }
+}
+
+///|
 test "custom textbox and searchbox roles require author-provided names" {
   let selected = ["role-textbox-name-missing", "role-searchbox-name-missing"]
   let named = "<span id=\"search-label\">Search catalog</span>" +

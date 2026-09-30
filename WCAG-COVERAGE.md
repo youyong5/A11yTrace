@@ -65,7 +65,7 @@ is never included as a current WCAG 2.2 requirement.
 | 3.3.7 Redundant Entry | A | 2.2+ | Not assessed | Test a multi-step flow. |
 | 3.3.8 Accessible Authentication | AA | 2.2+ | Manual review | `authentication-review`; test cognitive-function alternatives. |
 | 4.1.1 Parsing | A | 2.1 only | Removed in 2.2 | Historical only; `duplicate-id` is not reported as 2.2 conformance. |
-| 4.1.2 Name, Role, Value | A | both | Partial automatic | Names including custom ARIA button/link/radio/textbox/searchbox roles, WAI-ARIA 1.2 attribute names, selected role fallback/states, and ID relationships; review dynamic changes. |
+| 4.1.2 Name, Role, Value | A | both | Partial automatic | Names including custom ARIA button/link/radio/textbox/searchbox roles, WAI-ARIA 1.2 attribute names, selected role fallback/states (including scrollbar controls/valuenow), and ID relationships; review dynamic changes. |
 | 4.1.3 Status Messages | AA | both | Manual review | `status-message-review`; trigger updates with assistive technology. |
 
 The grouped rows retain every A/AA criterion; the public catalog contains one

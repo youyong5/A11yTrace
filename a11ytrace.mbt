@@ -924,7 +924,7 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       DocumentOrFragment,
       ConfirmedFinding,
       aria,
-      "Only the explicitly listed roles and required attributes are checked.",
+      "Checks only selected roles: checkbox/switch/radio checked, combobox expanded, slider valuenow, and scrollbar controls plus valuenow.",
     ),
     rule(
       "aria-idref-invalid",
@@ -2246,14 +2246,20 @@ fn collect_extended_aria_findings(
   enabled : Array[String],
   context : AuditContext,
 ) -> Unit {
-  if is_rule_enabled(enabled, "aria-required-property-missing") &&
-    has_missing_selected_required_aria_property(node) {
-    findings.push(
-      generic_finding(
-        node, path, "aria-required-property-missing", "This ARIA role omits a required state or property.",
-        "Add the required ARIA state or property for the role, or use a native element.",
-      ),
-    )
+  if is_rule_enabled(enabled, "aria-required-property-missing") {
+    match missing_selected_required_aria_property_message(node) {
+      Some(message) =>
+        findings.push(
+          generic_finding(
+            node,
+            path,
+            "aria-required-property-missing",
+            message,
+            missing_selected_required_aria_property_suggestion(node),
+          ),
+        )
+      None => ()
+    }
   }
   if is_rule_enabled(enabled, "aria-idref-invalid") &&
     has_invalid_selected_aria_idref(node, context) {
@@ -2821,15 +2827,61 @@ fn has_role_static_name(
 }
 
 ///|
-fn has_missing_selected_required_aria_property(node : @dom.Node) -> Bool {
+fn missing_selected_required_aria_property_message(node : @dom.Node) -> String? {
   match primary_role(node) {
     Some("checkbox") | Some("switch") =>
-      node.attrs().get("aria-checked") is None
+      if node.attrs().get("aria-checked") is None {
+        Some("This ARIA role omits a required state or property.")
+      } else {
+        None
+      }
     Some("radio") =>
-      !is_native_radio_input(node) && node.attrs().get("aria-checked") is None
-    Some("combobox") => node.attrs().get("aria-expanded") is None
-    Some("slider") => node.attrs().get("aria-valuenow") is None
-    _ => false
+      if !is_native_radio_input(node) &&
+        node.attrs().get("aria-checked") is None {
+        Some("This ARIA role omits a required state or property.")
+      } else {
+        None
+      }
+    Some("combobox") =>
+      if node.attrs().get("aria-expanded") is None {
+        Some("This ARIA role omits a required state or property.")
+      } else {
+        None
+      }
+    Some("slider") =>
+      if node.attrs().get("aria-valuenow") is None {
+        Some("This ARIA role omits a required state or property.")
+      } else {
+        None
+      }
+    Some("scrollbar") => {
+      let missing_controls = node.attrs().get("aria-controls") is None
+      let missing_valuenow = node.attrs().get("aria-valuenow") is None
+      if missing_controls && missing_valuenow {
+        Some(
+          "This scrollbar role omits required aria-controls and aria-valuenow.",
+        )
+      } else if missing_controls {
+        Some("This scrollbar role omits required aria-controls.")
+      } else if missing_valuenow {
+        Some("This scrollbar role omits required aria-valuenow.")
+      } else {
+        None
+      }
+    }
+    _ => None
+  }
+}
+
+///|
+fn missing_selected_required_aria_property_suggestion(
+  node : @dom.Node,
+) -> String {
+  match primary_role(node) {
+    Some("scrollbar") =>
+      "Add aria-controls and aria-valuenow to the scrollbar role, or use a native element."
+    _ =>
+      "Add the required ARIA state or property for the role, or use a native element."
   }
 }
 

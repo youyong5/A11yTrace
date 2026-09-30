@@ -42,7 +42,8 @@ WCAG success criteria.
 
 New narrow static rules are intentionally bounded: selected ARIA required
 property checks cover custom checkbox/switch/radio `aria-checked`, combobox
-`aria-expanded`, and slider `aria-valuenow`; selected ARIA IDREF checks cover
+`aria-expanded`, slider `aria-valuenow`, and scrollbar `aria-controls` plus
+`aria-valuenow`; selected ARIA IDREF checks cover
 `aria-activedescendant`, `aria-details`, `aria-controls`, and `aria-owns`.
 The role-name checks cover custom button/link/radio/textbox/searchbox, checkbox, combobox, slider,
 progressbar, meter, image, dialog and alertdialog roles with the same limited static naming
@@ -368,7 +369,14 @@ AccName or keyboard-interaction implementation.
 
 `aria-required-property-missing` checks only selected effective custom roles:
 `checkbox`, `switch`, and `radio` require `aria-checked`; `combobox` requires
-`aria-expanded`; and `slider` requires `aria-valuenow`. A native
+`aria-expanded`; and `slider` requires `aria-valuenow`. An effective custom
+`scrollbar` requires both `aria-controls` and `aria-valuenow`: a Finding names
+the one omitted property, or names both in one Finding when both are absent.
+An existing but missing/ambiguous `aria-controls` target is not treated as a
+missing property; `aria-idref-invalid` reports that relationship separately.
+This narrow rule does not require `aria-valuemin`, `aria-valuemax`,
+`aria-orientation`, or a name for a scrollbar, and deliberately does not
+require `aria-valuenow` on `spinbutton`, whose role has an implicit default. A native
 `<input type="radio">` is not reported merely because it uses its HTML checked
 state instead of an ARIA attribute, including when it redundantly carries
 `role="radio"`.
