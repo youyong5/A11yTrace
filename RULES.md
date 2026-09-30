@@ -19,7 +19,7 @@ list.
 
 ## WCAG coverage and result kinds
 
-The 81 stable IDs include confirmed static findings, structural hints, and
+The 82 stable IDs include confirmed static findings, structural hints, and
 located manual-review items. `wcag_aa_criteria()` and `wcag_criterion(id)`
 are the authoritative programmatic directory for WCAG 2.1/2.2 A/AA coverage;
 `WCAG-COVERAGE.md` supplies the human-readable table and review procedures.
@@ -34,8 +34,8 @@ assistive-technology exposure, shadow DOM and cross-page consistency cannot be
 proved from the parsed static input. `4.1.1 Parsing` appears only as a WCAG
 2.1 historical entry and is explicitly removed from WCAG 2.2.
 
-For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 81
-selectable IDs separately as 50 confirmed-finding checks, 7 static hints, and
+For release review, [RULE-INVENTORY.md](RULE-INVENTORY.md) lists all 82
+selectable IDs separately as 51 confirmed-finding checks, 7 static hints, and
 24 manual-review triggers, with their actual execution trigger and test
 evidence. Those are result categories, not a count of automatically passed
 WCAG success criteria.
@@ -594,6 +594,17 @@ whitespace such as `alt=" "`), an effective
 `role="none"` or `role="presentation"`, or `aria-hidden="true"` on the
 image or an ancestor.
 
+An `<img alt="">` with no explicit role remains a confirmed static decorative
+case. However, when that same no-role image has a static focusability signal
+such as `tabindex="0"` or `tabindex="-1"` and no supported name, this rule
+emits a ReviewItem rather than asserting decoration or a missing alternative.
+ACT 23a2a8 records that browsers and assistive technologies differ on whether
+such an empty-`alt` image is exposed, and presentational-role conflict
+resolution does not define that implicit-empty-`alt` focus case. This is why
+the library asks for browser verification. The existing explicit
+`role="none" tabindex="0"` case remains a static Finding: its explicit
+presentational role is known to conflict with focusability.
+
 An explicit `role="img"` with no supported name is a Finding, including when
 `alt` is empty. A presentational role with static focusability (`tabindex` or a
 native focus behavior) or any ARIA state/property is not treated as decorative;
@@ -618,6 +629,51 @@ Reports `<input>`, `<select>`, and `<textarea>` controls that have no recognizab
 The rule accepts non-empty text from a `<label for="control-id">`, a text-bearing wrapping `<label>` without `for`, non-empty `aria-label`, a supported direct-target `aria-labelledby` result, or non-empty `title`. A wrapping label with `for` is only accepted when that value matches the descendant control's `id`. Multiple `aria-labelledby` IDs retain IDREF order; supported targets can include direct SVG `<title>`. Empty labels and ARIA values, missing or empty `aria-labelledby` targets, a bare `id`, and `placeholder` do not count. `title` is a fallback: a visible label is usually better.
 
 This follows the [W3C Forms Labels Tutorial](https://www.w3.org/WAI/tutorials/forms/labels/). It is a focused static heuristic, not a complete implementation of the browser Accessible Name algorithm or a WCAG conformance determination.
+
+## `autocomplete-value-invalid`
+
+Reports a supported `<input>`, `<select>`, or `<textarea>` only when it has a
+non-empty, non-ASCII-whitespace-only `autocomplete` value that is not the
+single-token toggle `on` or `off`, and that value fails the bounded HTML
+Autofill grammar. Tokens are split on HTML ASCII whitespace and matched
+ASCII-case-insensitively. The supported ordered form is an optional
+`section-*` token, optional `shipping` or `billing`, an optional `home`,
+`work`, `mobile`, `fax`, or `pager` token only before a contact field, exactly
+one field token, and optional final `webauthn`. Contact fields are `tel`,
+`tel-country-code`, `tel-national`, `tel-area-code`, `tel-local`,
+`tel-local-prefix`, `tel-local-suffix`, `tel-extension`, `email`, and `impp`.
+The other supported HTML field names are `name`, `honorific-prefix`,
+`given-name`, `additional-name`, `family-name`, `honorific-suffix`, `nickname`,
+`username`, `new-password`, `current-password`, `one-time-code`,
+`organization-title`, `organization`, `street-address`, `address-line1`,
+`address-line2`, `address-line3`, `address-level4`, `address-level3`,
+`address-level2`, `address-level1`, `country`, `country-name`, `postal-code`,
+`cc-name`, `cc-given-name`, `cc-additional-name`, `cc-family-name`,
+`cc-number`, `cc-exp`, `cc-exp-month`, `cc-exp-year`, `cc-csc`, `cc-type`,
+`transaction-currency`, `transaction-amount`, `language`, `bday`, `bday-day`,
+`bday-month`, `bday-year`, `sex`, `url`, and `photo`. `webauthn` is accepted
+only on an `input` or `textarea` and only as the final token.
+
+The standalone `on` and `off` values are valid expectation-mantle toggles, but
+do not identify a WCAG input purpose. They are therefore outside this invalid-
+value rule and are never treated as positive 1.3.5 evidence.
+
+The rule skips missing, empty, or whitespace-only attributes, the single
+`on`/`off` values, disabled controls, `input[type=hidden]`, and ACT's fixed
+value input types (`button`, `checkbox`, `file`, `image`, `radio`, `reset`,
+and `submit`). HTML gives hidden inputs the autofill *anchor* mantle; this
+WCAG-oriented rule does not test them because ACT's 1.3.5 applicability
+excludes hidden controls. It conservatively skips all descendants of a disabled
+fieldset rather than reconstructing the first-legend exception.
+
+This is a syntax-and-order check calibrated to the [WHATWG HTML Autofill
+rules](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill)
+and [W3C ACT Rule 73f2c2](https://www.w3.org/WAI/standards-guidelines/act/rules/73f2c2/).
+It does not determine the control's actual personal-data purpose, whether a
+field token is appropriate for the control's type, CSS visibility, sequential
+focus navigation, accessibility-tree inclusion, runtime operability, or a
+custom taxonomy. A valid token sequence therefore does not prove WCAG 1.3.5,
+and an invalid custom value is not by itself a complete WCAG failure verdict.
 
 ## `link-name-missing`
 

@@ -1400,6 +1400,15 @@ fn extended_rule_catalog() -> Array[RuleMetadata] {
       "https://www.w3.org/TR/wai-aria-1.2/#required-context-role",
       "Checks only documented tab, option, table, listitem, menu-item, and treeitem context pairs against recovered DOM ancestry or one unique valid local aria-owns owner. Root-level, hidden, presentational, ambiguous, and unmodeled relationships are deliberately skipped because static DOM is not the browser accessibility tree.",
     ),
+    rule(
+      "autocomplete-value-invalid",
+      "Autocomplete value does not match the supported HTML autofill-token grammar.",
+      Relationships,
+      DocumentOrFragment,
+      ConfirmedFinding,
+      "https://www.w3.org/WAI/standards-guidelines/act/rules/73f2c2/",
+      "Checks non-empty autocomplete token syntax/order on input, select, and textarea, excluding hidden and ACT fixed-value input types. It does not infer purpose, CSS visibility, runtime interactivity, or field/control appropriateness.",
+    ),
   ]
 }
 
@@ -1537,9 +1546,9 @@ fn wcag_criteria_catalog() -> Array[WcagCriterion] {
       "Identify Input Purpose",
       AA,
       true,
-      ManualReview,
-      [],
-      "For personal-data inputs, verify valid autocomplete purpose tokens and that the intended purpose applies.",
+      PartialAutomatic,
+      ["autocomplete-value-invalid"],
+      "The autocomplete token grammar is checked when present; verify that personal-data controls use a suitable purpose and that the declared purpose is true.",
     ),
     wcag_entry(
       "1.4.1",
@@ -2374,6 +2383,15 @@ fn collect_findings(
           NameConfirmed(_) => ()
         }
       }
+      if is_rule_enabled(enabled_rule_ids, "autocomplete-value-invalid") &&
+        has_invalid_autocomplete_value(child) {
+        findings.push(
+          generic_finding(
+            child, path, "autocomplete-value-invalid", "This autocomplete value does not match the supported HTML autofill-token grammar.",
+            "Use one field token, with optional section-*, shipping or billing, a contact hint only for email/impp/tel fields, and a final webauthn token when applicable.",
+          ),
+        )
+      }
       if is_rule_enabled(enabled_rule_ids, "link-name-missing") &&
         is_link_to_check(child) {
         match link_static_name_result(child, context) {
@@ -3189,7 +3207,16 @@ fn image_text_alternative_result(
           NameUncertain => ImageAlternativeUncertain
           NameMissing =>
             if has_explicit_empty_alt(image) {
-              ImageDecorativeConfirmed
+              // ACT 23a2a8 documents browser and assistive-technology
+              // differences for an img whose empty alt implies presentation
+              // but that is still focusable. Keep the ordinary empty-alt
+              // case decorative, but do not turn a tabindex case into a
+              // definite decoration or missing-name conclusion.
+              if is_potentially_focusable(image) {
+                ImageAlternativeUncertain
+              } else {
+                ImageDecorativeConfirmed
+              }
             } else {
               ImageAlternativeMissing
             }
@@ -4897,6 +4924,195 @@ fn is_non_name_text_element(name : String) -> Bool {
 }
 
 ///|
+fn has_invalid_autocomplete_value(node : @dom.Node) -> Bool {
+  if !is_autocomplete_control_to_check(node) {
+    return false
+  }
+  match node.attrs().get("autocomplete") {
+    Some(Some(value)) => {
+      let tokens = ascii_whitespace_tokens(value)
+      // ACT 73f2c2 leaves absent, empty/ASCII-whitespace-only attributes, and
+      // the standalone expectation-mantle toggles out of its test targets.
+      if tokens.is_empty() ||
+        (tokens.length() == 1 && tokens[0] is ("on" | "off")) {
+        false
+      } else {
+        !has_valid_autofill_detail_tokens(node, tokens)
+      }
+    }
+    // A boolean-ish attribute has no non-empty value to validate.
+    _ => false
+  }
+}
+
+///|
+fn is_autocomplete_control_to_check(node : @dom.Node) -> Bool {
+  if has_disabled_attribute(node) || has_disabled_fieldset_ancestor(node) {
+    return false
+  }
+  match node.name() {
+    "select" | "textarea" => true
+    "input" =>
+      // ACT 73f2c2 excludes fixed-value input states. type=hidden has the
+      // HTML anchor mantle, but is also statically hidden and outside this
+      // WCAG-oriented rule's target set, so it is deliberately skipped.
+      !is_autocomplete_excluded_input_type(input_type(node))
+    _ => false
+  }
+}
+
+///|
+fn has_disabled_fieldset_ancestor(node : @dom.Node) -> Bool {
+  let mut ancestor = node.parent()
+  while ancestor is Some(parent) {
+    if parent.kind() is @dom.Element &&
+      parent.name() == "fieldset" &&
+      has_disabled_attribute(parent) {
+      // Conservatively skip all descendants. The HTML first-legend exception
+      // needs a more complete form-control model than this token validator.
+      return true
+    }
+    ancestor = parent.parent()
+  }
+  false
+}
+
+///|
+fn is_autocomplete_excluded_input_type(type_ : String) -> Bool {
+  type_
+  is ("hidden"
+  | "button"
+  | "checkbox"
+  | "file"
+  | "image"
+  | "radio"
+  | "reset"
+  | "submit")
+}
+
+///|
+fn ascii_whitespace_tokens(value : String) -> Array[String] {
+  let normalized = value
+    .replace_all(old="\t", new=" ")
+    .replace_all(old="\n", new=" ")
+    .replace_all(old="\r", new=" ")
+    .replace_all(old="\u{000C}", new=" ")
+  let tokens : Array[String] = []
+  for token in normalized.split(" ") {
+    // Do not use Unicode trim here: HTML's space-separated token syntax is
+    // defined with ASCII whitespace. A non-ASCII separator remains invalid.
+    if !token.is_empty() {
+      tokens.push(token.to_lower().to_owned())
+    }
+  }
+  tokens
+}
+
+///|
+fn has_valid_autofill_detail_tokens(
+  node : @dom.Node,
+  tokens : Array[String],
+) -> Bool {
+  let mut index = 0
+  if index < tokens.length() && tokens[index].has_prefix("section-") {
+    index += 1
+  }
+  if index < tokens.length() && tokens[index] is ("shipping" | "billing") {
+    index += 1
+  }
+  if index < tokens.length() && is_autofill_contact_hint(tokens[index]) {
+    index += 1
+    if index >= tokens.length() || !is_contact_autofill_field(tokens[index]) {
+      return false
+    }
+    index += 1
+  } else {
+    if index >= tokens.length() || !is_autofill_field_name(tokens[index]) {
+      return false
+    }
+    index += 1
+  }
+  if index < tokens.length() && tokens[index] == "webauthn" {
+    // The HTML Standard permits this final token only on input and textarea.
+    if node.name() == "select" {
+      return false
+    }
+    index += 1
+  }
+  index == tokens.length()
+}
+
+///|
+fn is_autofill_contact_hint(token : String) -> Bool {
+  token is ("home" | "work" | "mobile" | "fax" | "pager")
+}
+
+///|
+fn is_contact_autofill_field(token : String) -> Bool {
+  token
+  is ("tel"
+  | "tel-country-code"
+  | "tel-national"
+  | "tel-area-code"
+  | "tel-local"
+  | "tel-local-prefix"
+  | "tel-local-suffix"
+  | "tel-extension"
+  | "email"
+  | "impp")
+}
+
+///|
+fn is_autofill_field_name(token : String) -> Bool {
+  token
+  is ("name"
+  | "honorific-prefix"
+  | "given-name"
+  | "additional-name"
+  | "family-name"
+  | "honorific-suffix"
+  | "nickname"
+  | "username"
+  | "new-password"
+  | "current-password"
+  | "one-time-code"
+  | "organization-title"
+  | "organization"
+  | "street-address"
+  | "address-line1"
+  | "address-line2"
+  | "address-line3"
+  | "address-level4"
+  | "address-level3"
+  | "address-level2"
+  | "address-level1"
+  | "country"
+  | "country-name"
+  | "postal-code"
+  | "cc-name"
+  | "cc-given-name"
+  | "cc-additional-name"
+  | "cc-family-name"
+  | "cc-number"
+  | "cc-exp"
+  | "cc-exp-month"
+  | "cc-exp-year"
+  | "cc-csc"
+  | "cc-type"
+  | "transaction-currency"
+  | "transaction-amount"
+  | "language"
+  | "bday"
+  | "bday-day"
+  | "bday-month"
+  | "bday-year"
+  | "sex"
+  | "url"
+  | "photo") ||
+  is_contact_autofill_field(token)
+}
+
+///|
 fn is_form_control_to_check(node : @dom.Node) -> Bool {
   match node.name() {
     "select" | "textarea" => true
@@ -5359,7 +5575,7 @@ fn image_text_alternative_review_item(
 ) -> ReviewItem {
   {
     rule_id: "img-text-alternative-missing",
-    reason: "This image has an explicit role whose browser accessibility mapping is outside the supported static subset; verify its text alternative in a browser.",
+    reason: "This image is statically focusable without a confirmed text alternative, or has an explicit role whose browser accessibility mapping is outside the supported static subset; verify its text alternative in a browser.",
     element_path: path,
     line: node.origin_line(),
     column: node.origin_col(),

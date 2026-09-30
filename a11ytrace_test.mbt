@@ -526,7 +526,7 @@ test "detailed audits preserve recoverable parser diagnostics separately" {
 ///|
 test "rule directory exposes stable metadata and copied rule selections" {
   let rules = @a11ytrace.available_rules()
-  assert_eq(rules.length(), 81)
+  assert_eq(rules.length(), 82)
   assert_eq(rules[0].id, "img-alt-missing")
   assert_eq(rules[1].id, "img-text-alternative-missing")
   assert_eq(rules[22].id, "meta-refresh-delay")
@@ -565,6 +565,19 @@ test "rule directory exposes stable metadata and copied rule selections" {
       )
     }
     None => fail("range-value metadata must be available")
+  }
+  match @a11ytrace.rule_metadata("autocomplete-value-invalid") {
+    Some(rule) => {
+      assert_true(
+        rule.result_kind is @a11ytrace.RuleResultKind::ConfirmedFinding,
+      )
+      assert_true(rule.scope is @a11ytrace.RuleScope::DocumentOrFragment)
+      assert_eq(
+        rule.reference_url,
+        "https://www.w3.org/WAI/standards-guidelines/act/rules/73f2c2/",
+      )
+    }
+    None => fail("autocomplete metadata must be available")
   }
   match @a11ytrace.rule_metadata("label-for-target-not-labelable") {
     Some(rule) => {
@@ -1001,7 +1014,7 @@ test "keeps all rules and heading findings in document order" {
 ///|
 test "lists rule IDs and keeps the default audit behavior" {
   let rule_ids = @a11ytrace.available_rule_ids()
-  assert_eq(rule_ids.length(), 81)
+  assert_eq(rule_ids.length(), 82)
   assert_eq(rule_ids[0], "img-alt-missing")
   assert_eq(rule_ids[1], "img-text-alternative-missing")
   assert_eq(rule_ids[5], "heading-level-skipped")
@@ -1033,6 +1046,7 @@ test "lists rule IDs and keeps the default audit behavior" {
   assert_true(rule_ids.contains("html-lang-invalid"))
   assert_true(rule_ids.contains("element-lang-invalid"))
   assert_true(rule_ids.contains("aria-required-context-role"))
+  assert_true(rule_ids.contains("autocomplete-value-invalid"))
   rule_ids[0] = "not-a-rule"
   let fresh_rule_ids = @a11ytrace.available_rule_ids()
   assert_eq(fresh_rule_ids[0], "img-alt-missing")
@@ -1065,7 +1079,7 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       item.coverage_status is @a11ytrace.WcagCoverageStatus::PartialAutomatic
     })
     .length(),
-    10,
+    11,
   )
   assert_eq(
     criteria
@@ -1073,7 +1087,7 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       item.coverage_status is @a11ytrace.WcagCoverageStatus::ManualReview
     })
     .length(),
-    32,
+    31,
   )
   assert_eq(
     criteria
@@ -1131,6 +1145,16 @@ test "WCAG coverage catalog is version aware and does not claim a pass" {
       assert_true(criterion.rule_ids.contains("img-text-alternative-missing"))
     }
     None => fail("image alternative coverage must retain its partial boundary")
+  }
+  match @a11ytrace.wcag_criterion("1.3.5") {
+    Some(criterion) => {
+      assert_true(
+        criterion.coverage_status
+        is @a11ytrace.WcagCoverageStatus::PartialAutomatic,
+      )
+      assert_true(criterion.rule_ids.contains("autocomplete-value-invalid"))
+    }
+    None => fail("autocomplete syntax coverage must be documented as partial")
   }
   let result = @a11ytrace.audit_html_with_wcag_coverage("<p>Clean-looking</p>")
   assert_eq(result.audit.findings.length(), 0)
@@ -3604,6 +3628,45 @@ test "image text alternative rule keeps unmodeled role mappings as review" {
 }
 
 ///|
+test "focusable empty-alt images remain browser review while explicit presentation conflicts fail" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<img alt=\"\"><img alt=\"\" tabindex=\"0\"><img alt=\"\" tabindex=\"-1\"><img role=\"none\" tabindex=\"0\">",
+      ["img-text-alternative-missing"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("image semantic rule must audit focusability cases")
+  }
+  assert_eq(detailed.findings.length(), 1)
+  assert_eq(detailed.findings[0].rule_id, "img-text-alternative-missing")
+  assert_eq(detailed.findings[0].element_path, "img:nth-of-type(4)")
+  assert_eq(detailed.review_items.length(), 2)
+  assert_eq(detailed.review_items[0].rule_id, "img-text-alternative-missing")
+  assert_eq(detailed.review_items[0].element_path, "img:nth-of-type(2)")
+  assert_eq(detailed.review_items[1].rule_id, "img-text-alternative-missing")
+  assert_eq(detailed.review_items[1].element_path, "img:nth-of-type(3)")
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array([{ "rule_id": String(finding), .. }]),
+      "review_items": Array(
+        [
+          { "rule_id": String(first), "element_path": String(first_path), .. },
+          { "rule_id": String(second), "element_path": String(second_path), .. },
+        ]
+      ),
+      ..
+    } => {
+      assert_eq(finding, "img-text-alternative-missing")
+      assert_eq(first, "img-text-alternative-missing")
+      assert_eq(first_path, "img:nth-of-type(2)")
+      assert_eq(second, "img-text-alternative-missing")
+      assert_eq(second_path, "img:nth-of-type(3)")
+    }
+    _ => fail("detailed JSON must keep focusable empty-alt images as reviews")
+  }
+}
+
+///|
 test "image semantic rule avoids duplicate default finding and keeps legacy selection" {
   match @a11ytrace.audit_html("<img>") {
     Findings(findings) => {
@@ -3679,4 +3742,96 @@ test "native img role image is owned by image semantics not the SVG role rule" {
   assert_eq(detailed.findings.length(), 1)
   assert_eq(detailed.findings[0].rule_id, "img-text-alternative-missing")
   assert_eq(detailed.review_items.length(), 0)
+}
+
+///|
+test "autocomplete value rule accepts HTML detail token order and ASCII whitespace" {
+  let fragment = "<input autocomplete=\"SECTION-Blue\tSHIPPING\r\nWORK EMAIL webauthn\">" +
+    "<textarea autocomplete=\"section-address billing street-address\"></textarea>" +
+    "<select autocomplete=\"country-name\"></select>" +
+    "<input autocomplete=\"on\"><input autocomplete=\"OFF\"><input autocomplete=\" \t\n\">"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "autocomplete-value-invalid",
+    ]) {
+    Audited(Findings(findings)) => assert_eq(findings.length(), 0)
+    Audited(_) =>
+      fail(
+        "valid detail tokens, toggles, and whitespace-only values must not report",
+      )
+    ConfigurationError(_) => fail("autocomplete rule must be selectable")
+  }
+}
+
+///|
+test "autocomplete value rule reports only invalid static token combinations" {
+  let fragment = "<input autocomplete=\"not-a-field\">" +
+    "<input autocomplete=\"shipping billing email\">" +
+    "<input autocomplete=\"email home\">" +
+    "<input autocomplete=\"home name\">" +
+    "<input autocomplete=\"webauthn username\">" +
+    "<input autocomplete=\"shipping shipping email\">" +
+    "<select autocomplete=\"username webauthn\"></select>" +
+    "<input autocomplete=\"shipping\u{00A0}email\">" +
+    "<input type=\"hidden\" autocomplete=\"not-a-field\">" +
+    "<input type=\"button\" autocomplete=\"not-a-field\">" +
+    "<input type=\"checkbox\" autocomplete=\"not-a-field\">" +
+    "<input type=\"file\" autocomplete=\"not-a-field\">" +
+    "<input type=\"image\" autocomplete=\"not-a-field\">" +
+    "<input type=\"radio\" autocomplete=\"not-a-field\">" +
+    "<input type=\"reset\" autocomplete=\"not-a-field\">" +
+    "<input type=\"submit\" autocomplete=\"not-a-field\">" +
+    "<textarea disabled autocomplete=\"not-a-field\"></textarea>"
+  match
+    @a11ytrace.audit_html_fragment_with_rules(fragment, [
+      "autocomplete-value-invalid",
+    ]) {
+    Audited(Findings(findings)) => {
+      assert_eq(findings.length(), 8)
+      for finding in findings {
+        assert_eq(finding.rule_id, "autocomplete-value-invalid")
+      }
+      assert_eq(findings[0].element_path, "input:nth-of-type(1)")
+      assert_eq(findings[7].element_path, "input:nth-of-type(7)")
+    }
+    Audited(_) =>
+      fail(
+        "unknown, out-of-order, repeated, and invalid webauthn tokens must report",
+      )
+    ConfigurationError(_) => fail("autocomplete rule must be selectable")
+  }
+}
+
+///|
+test "autocomplete rule preserves fragment order diagnostics and detailed JSON" {
+  let detailed = match
+    @a11ytrace.audit_html_fragment_detailed_with_rules(
+      "<input autocomplete=\"unknown\"></span><textarea autocomplete=\"billing home name\"></textarea>",
+      ["autocomplete-value-invalid"],
+    ) {
+    @a11ytrace.DetailedConfiguredAuditResult::Audited(result) => result
+    _ => fail("autocomplete rule must audit a recoverable fragment")
+  }
+  assert_eq(detailed.findings.length(), 2)
+  assert_eq(detailed.findings[0].element_path, "input:nth-of-type(1)")
+  assert_eq(detailed.findings[1].element_path, "textarea:nth-of-type(1)")
+  assert_true(detailed.parse_diagnostics.length() > 0)
+  match @json.parse(@a11ytrace.render_detailed_audit_json(detailed)) {
+    {
+      "findings": Array(
+        [
+          { "rule_id": String(first), "element_path": String(first_path), .. },
+          { "rule_id": String(second), "element_path": String(second_path), .. },
+        ]
+      ),
+      "parse_diagnostics": Array([_, ..]),
+      ..
+    } => {
+      assert_eq(first, "autocomplete-value-invalid")
+      assert_eq(first_path, "input:nth-of-type(1)")
+      assert_eq(second, "autocomplete-value-invalid")
+      assert_eq(second_path, "textarea:nth-of-type(1)")
+    }
+    _ => fail("autocomplete findings and diagnostics must remain JSON-visible")
+  }
 }

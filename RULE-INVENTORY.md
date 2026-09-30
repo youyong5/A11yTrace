@@ -2,7 +2,7 @@
 
 This is the current release-review inventory. It deliberately distinguishes
 directory metadata from execution:
-there are **81 selectable metadata IDs**, comprising **50 confirmed-finding
+there are **82 selectable metadata IDs**, comprising **51 confirmed-finding
 checks**, **7 static-hint checks**, and **24 manual-review triggers**. The
 first two kinds append `Finding` values; review triggers append `ReviewItem`
 values. A review-only detailed JSON result has `assessment: "needs_review"`;
@@ -19,6 +19,7 @@ they appear in `a11ytrace_test.mbt`; a test may cover more than one row.
 | img-alt-missing | original | confirmed | `img` omits `alt` | 1.1.1 | C/O | reports an image without alt; accepts an explicitly decorative image |
 | img-text-alternative-missing | new | confirmed/review | `img` has no supported static name and is not statically decorative; unmodeled explicit roles review | 1.1.1 | C/H | image text alternatives distinguish names decoration and missing alternatives; image semantic rule keeps unmodeled role mappings as review |
 | form-control-name-missing | original | confirmed/review | selected input/select/textarea has no supported static name | 3.3.2, 4.1.2 | C/O | reports placeholder-only and empty or invalid label references; accepts direct SVG title, leaves unresolved SVG as review |
+| autocomplete-value-invalid | new | confirmed | non-empty, non-toggle `autocomplete` on a supported input/select/textarea has an invalid HTML Autofill token sequence | 1.3.5 partial static check | C/H | autocomplete value rule accepts HTML detail token order and ASCII whitespace; autocomplete value rule reports only invalid static token combinations; autocomplete rule preserves fragment order diagnostics and detailed JSON |
 | link-name-missing | original | confirmed/review | `a[href]` has no supported static name | 2.4.4, 4.1.2 | C/O | reports empty links and decorative-image-only links; accepts direct SVG title, leaves unresolved SVG as review |
 | button-name-missing | original | confirmed/review | native button/input button/image has no static name | 4.1.2 | C/O | reports empty and decorative-image-only native buttons; accepts direct SVG title, leaves unresolved SVG as review |
 | heading-level-skipped | original | static hint | later native heading drops two+ levels | 2.4.6 review practice | C/O | only reports downward native heading level skips |

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Autocomplete token comparison</title>
+  </head>
+  <body>
+    <label>Email
+      <input autocomplete="section-contact shipping work email">
+    </label>
+    <label>Username
+      <input autocomplete="USERNAME webauthn">
+    </label>
+    <label>Invalid field
+      <input autocomplete="not-a-field">
+    </label>
+    <label>Invalid contact hint
+      <input autocomplete="home name">
+    </label>
+    <label>Invalid order
+      <input autocomplete="billing shipping email">
+    </label>
+    <label>Invalid select webauthn
+      <select autocomplete="country webauthn"><option>Example</option></select>
+    </label>
+    <input type="hidden" autocomplete="not-a-field" value="not user input">
+    <input type="checkbox" autocomplete="not-a-field">
+  </body>
+</html>

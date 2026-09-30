@@ -5,11 +5,11 @@ A11yTrace is a small, pure MoonBit library for statically checking HTML accessib
 ## Release 0.5.0
 
 The published 0.5.0 release provides 80 selectable built-in IDs. This
-development checkout adds `img-text-alternative-missing`, for 81 IDs,
-deliberately separated into 50 confirmed Finding checks, 7 static hints, and
+development checkout adds `img-text-alternative-missing` and
+`autocomplete-value-invalid`, for 82 IDs, deliberately separated into 51 confirmed Finding checks, 7 static hints, and
 24 ReviewItem triggers. That directory is not an automatic WCAG-conformance count. The public WCAG directory
 contains 55 current WCAG 2.2 A/AA criteria plus historical 4.1.1 (removed in
-2.2): 10 are partially checked from static HTML, 32 have manual-review steps,
+2.2): 11 are partially checked from static HTML, 31 have manual-review steps,
 and 13 are not assessed. Zero findings never means WCAG conformance.
 
 For detailed JSON, `assessment` is `findings`, `needs_review`,
@@ -131,7 +131,7 @@ criterion, the version difference, mappings, and the required review step.
 "criteria": […coverage records…]}`. Each criterion uses the stable
 `coverage_status` strings `partial_automatic`, `manual_review`,
 `not_assessed`, or `removed_in_wcag22`; none is a pass status.
-The current directory has 56 records: 10 partial-automatic, 32 manual-review,
+The current directory has 56 records: 11 partial-automatic, 31 manual-review,
 13 not-assessed, and the one WCAG 2.1 historical record removed in WCAG 2.2.
 
 ## HTML fragment audit
@@ -235,7 +235,7 @@ moon run --target native cmd/a11ytrace -- --help
 
 ## Current rule and boundary
 
-The rule directory now has 81 independently selectable checks and review
+The rule directory now has 82 independently selectable checks and review
 triggers. In addition to the rules below, it covers selected ARIA required
 properties and ID relationships; static names for selected ARIA widgets;
 direct list/definition-list structure; empty table headers; unsafe viewport
@@ -269,6 +269,8 @@ for each modeled row and excluded role.
 `img-text-alternative-missing` is a separate static semantic check for `<img>`. It accepts non-empty `alt`, `aria-label`, a unique supported `aria-labelledby` target, or fallback `title`; it accepts an exactly empty `alt`, effective `role="none"`/`role="presentation"`, and `aria-hidden="true"` as static decoration/exclusion signals. Whitespace-only `alt` is not treated as decorative. Explicit `role="img"` with an empty name is reported. Focusability or ARIA properties prevent the rule from treating a presentational role as decorative. An unmodeled explicit role becomes a ReviewItem, not a Finding. In the default audit, a bare image that omits `alt` keeps the legacy `img-alt-missing` Finding rather than receiving two equivalent findings. Neither image rule judges whether text accurately serves the image's purpose, so neither alone proves a WCAG 1.1.1 outcome.
 
 `form-control-name-missing` reports unnamed `<input>`, `<select>`, and `<textarea>` controls, excluding hidden and button-like input types. It recognizes text-bearing labels, non-empty ARIA names, direct SVG `<title>` in supported static sources, and `title` as a fallback; unresolved SVG/browser sources remain review outcomes. It does not implement the complete browser Accessible Name algorithm.
+
+`autocomplete-value-invalid` validates the syntax and order of an existing, non-empty HTML `autocomplete` token list on supported `<input>`, `<select>`, and `<textarea>` controls. It accepts ASCII-whitespace-separated, case-insensitive optional `section-*`, `shipping`/`billing`, a contact hint only before an email/IMPP/telephone field, one known field token, and final `webauthn` on input/textarea. It skips lone `on`/`off`, hidden/fixed-value input types, and disabled controls. It does not decide a control's real data purpose, control/type suitability, CSS/runtime applicability, or WCAG conformance.
 
 `link-name-missing` reports an `<a href>` without recognizable text, non-empty image alt text, direct SVG `<title>`, ARIA name, or fallback title. It ignores script, style, and template text. It checks presence of a name, not whether the destination is described clearly; unresolved SVG sources become ReviewItems rather than a definite missing-name Finding.
 

@@ -14,7 +14,7 @@ item when static markup contains a relevant trigger, or needs the listed
 procedure; **Not assessed** has no reliable static trigger in this release.
 `4.1.1` is retained only as WCAG 2.1 history: it was removed in WCAG 2.2.
 
-Current directory totals: **56** records = **10 partial automatic**, **32
+Current directory totals: **56** records = **11 partial automatic**, **31
 manual review**, **13 not assessed**, and **1 removed in WCAG 2.2**. The 55
 records marked present in WCAG 2.2 are the current A/AA set; the removed record
 is never included as a current WCAG 2.2 requirement.
@@ -27,7 +27,7 @@ is never included as a current WCAG 2.2 requirement.
 | 1.3.2 Meaningful Sequence | A | both | Manual review | `meaningful-sequence-review`; compare DOM and rendered order. |
 | 1.3.3 Sensory Characteristics | A | both | Not assessed | Inspect instructions for shape/color/location/sound-only cues. |
 | 1.3.4 Orientation | AA | both | Not assessed | Test portrait and landscape. |
-| 1.3.5 Identify Input Purpose | AA | both | Manual review | Check personal-data autocomplete purpose tokens and context. |
+| 1.3.5 Identify Input Purpose | AA | both | Partial automatic | `autocomplete-value-invalid` checks supported non-empty token syntax and order; verify actual personal-data purpose, field suitability, visibility, and runtime behavior. |
 | 1.4.1 Use of Color | A | both | Not assessed | Inspect rendered information/state cues. |
 | 1.4.2 Audio Control | A | both | Manual review | `media-autoplay-audio-review`; verify audible autoplay duration and controls. |
 | 1.4.3 Contrast (Minimum) | AA | both | Manual review | `contrast-review`; measure rendered text colors/states. |
