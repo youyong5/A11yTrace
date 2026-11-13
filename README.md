@@ -4,15 +4,14 @@ A reusable MoonBit library for focused, static HTML accessibility checks. It is 
 
 ## Install and use
 
-The maintenance checkout is version 0.6.1. Once it is published on Mooncakes,
-install it in a fresh MoonBit project and import the public package name:
+The published package is `youyong5/a11ytrace@0.6.1`. Install it in a fresh
+MoonBit project and import the public package name:
 
 **Toolchain compatibility:** The published 0.6.0 package depends on
 `moonbitlang/async@0.19.0`, whose old `moon.mod.json` cannot be resolved by
-MoonBit `moon 0.1.20261104` / `moonc v0.10.20`. The 0.6.1 maintenance checkout
-updates the dependencies and passes the checks below. At the time of this
-update, 0.6.1 is not yet published; use the checkout on this toolchain until
-the 0.6.1 Mooncakes release is available.
+MoonBit `moon 0.1.20261104` / `moonc v0.10.20`. Version 0.6.1 updates both
+dependencies and works with this toolchain. Run `moon update` if your local
+registry index does not yet find the new dependency versions.
 
 ```text
 moon new a11ytrace-demo
@@ -49,7 +48,7 @@ moon run cmd/main
 To work from a checkout instead, clone it and run `moon check`; the module name
 is still `youyong5/a11ytrace`.
 
-The 0.6.1 checkout was verified with `moon version --all`: `moon
+Version 0.6.1 was verified with `moon version --all`: `moon
 0.1.20261104 (940aa18 2026-11-04)`, `moonc v0.10.20+65efd5b93
 (2026-11-05)`, and `moonrun 0.1.20261104 (940aa18 2026-11-04)`.
 It uses `bobzhang/html_parser@0.2.3` and `moonbitlang/async@0.22.9`.
@@ -57,9 +56,9 @@ Run `moon update`, then `moon check` and `moon test` (default, JS, Wasm,
 Native); `moon build --target native cmd/a11ytrace` and
 `moon run --target native examples/consumer` verify the native entry points.
 
-## Release 0.6.0
+## Release 0.6.1
 
-The published 0.6.0 package has **82** selectable built-in IDs: **51** confirmed
+The published 0.6.1 package has **82** selectable built-in IDs: **51** confirmed
 Finding checks, 7 static hints, and 24 ReviewItem triggers. These are distinct
 result classes, not 82 automatic WCAG checks. Its public WCAG directory records the 55 current
 WCAG 2.2 A/AA success criteria and one historical WCAG 2.1 entry (4.1.1,
