@@ -21,8 +21,8 @@ pub(all) struct Finding {
   message : String
   suggestion : String
   element_path : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 ///|
@@ -30,8 +30,8 @@ pub(all) struct Finding {
 pub(all) struct ParseDiagnostic {
   code : String
   message : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 ///|
@@ -49,8 +49,8 @@ pub(all) struct ReviewItem {
   rule_id : String
   reason : String
   element_path : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 ///|
@@ -168,7 +168,7 @@ pub(all) struct WcagAuditResult {
 priv struct ExactDecimal {
   negative : Bool
   digits : Array[Char]
-  scale : Int
+  scale : Int32
 }
 
 ///|
@@ -547,7 +547,7 @@ fn wcag_coverage_status_string(status : WcagCoverageStatus) -> String {
 }
 
 ///|
-fn optional_int_json(value : Int?) -> Json {
+fn optional_int_json(value : Int32?) -> Json {
   match value {
     Some(value) => @json.to_json(value)
     None => null
@@ -2193,11 +2193,11 @@ fn collect_findings(
   findings : Array[Finding],
   review_items : Array[ReviewItem],
   enabled_rule_ids : Array[String],
-  previous_heading_level : Int?,
+  previous_heading_level : Int32?,
   context : AuditContext,
   aria_hidden_ancestor : Bool,
   seen_navigation_names : Array[String],
-) -> Int? {
+) -> Int32? {
   let children = node.children()
   let mut last_heading_level = previous_heading_level
   let mut position = 0
@@ -3626,7 +3626,7 @@ fn parse_exact_range_decimal(value : String) -> RangeDecimalParse {
 }
 
 ///|
-fn compare_exact_decimals(left : ExactDecimal, right : ExactDecimal) -> Int {
+fn compare_exact_decimals(left : ExactDecimal, right : ExactDecimal) -> Int32 {
   let left_is_zero = is_exact_decimal_zero(left)
   let right_is_zero = is_exact_decimal_zero(right)
   if left_is_zero && right_is_zero {
@@ -3661,7 +3661,7 @@ fn is_exact_decimal_zero(value : ExactDecimal) -> Bool {
 fn compare_exact_decimal_magnitudes(
   left : ExactDecimal,
   right : ExactDecimal,
-) -> Int {
+) -> Int32 {
   let left_integer_digits = left.digits.length() - left.scale
   let right_integer_digits = right.digits.length() - right.scale
   if left_integer_digits < right_integer_digits {
@@ -4657,7 +4657,7 @@ fn is_invalid_token(value : String) -> Bool {
 }
 
 ///|
-fn heading_level(node : @dom.Node) -> Int? {
+fn heading_level(node : @dom.Node) -> Int32? {
   match node.name() {
     "h1" => Some(1)
     "h2" => Some(2)
@@ -5362,7 +5362,7 @@ fn label_has_multiple_known_labelable_descendants(node : @dom.Node) -> Bool {
 }
 
 ///|
-fn count_known_labelable_descendants(node : @dom.Node) -> Int {
+fn count_known_labelable_descendants(node : @dom.Node) -> Int32 {
   let mut count = 0
   for child in node.children() {
     if child.kind() is @dom.Element {
@@ -5889,9 +5889,9 @@ fn missing_heading_name_finding(node : @dom.Node, path : String) -> Finding {
 ///|
 fn nth_of_type(
   siblings : Array[@dom.Node],
-  position : Int,
+  position : Int32,
   name : String,
-) -> Int {
+) -> Int32 {
   let mut count = 0
   let mut index = 0
   while index <= position {
@@ -5905,7 +5905,11 @@ fn nth_of_type(
 }
 
 ///|
-fn child_path(parent_path : String, name : String, occurrence : Int) -> String {
+fn child_path(
+  parent_path : String,
+  name : String,
+  occurrence : Int32,
+) -> String {
   if parent_path == "" {
     "\{name}:nth-of-type(\{occurrence})"
   } else {

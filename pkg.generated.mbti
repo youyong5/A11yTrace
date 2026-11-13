@@ -79,23 +79,23 @@ pub(all) struct Finding {
   message : String
   suggestion : String
   element_path : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 pub(all) struct ParseDiagnostic {
   code : String
   message : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 pub(all) struct ReviewItem {
   rule_id : String
   reason : String
   element_path : String
-  line : Int?
-  column : Int?
+  line : Int32?
+  column : Int32?
 }
 
 pub(all) enum RuleCategory {

@@ -1,9 +1,10 @@
 ///|
+#derive(Eq)
 enum OutputFormat {
   Text
   Json
   DetailedJson
-} derive(Eq)
+}
 
 ///|
 struct CliConfig {
@@ -196,7 +197,11 @@ fn append_diagnostics(
 }
 
 ///|
-fn append_location(output : StringBuilder, line : Int?, column : Int?) -> Unit {
+fn append_location(
+  output : StringBuilder,
+  line : Int32?,
+  column : Int32?,
+) -> Unit {
   match (line, column) {
     (Some(line), Some(column)) =>
       output.write_string(" (line \{line}, column \{column})")

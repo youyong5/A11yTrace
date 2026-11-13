@@ -17,13 +17,21 @@ explicitly `needs_review`.
 
 ## Install from Mooncakes
 
-From a new MoonBit project, install the release and import its public module
-name:
+Once the 0.6.1 maintenance release is on Mooncakes, install it from a new
+MoonBit project and import its public module name:
+
+The published 0.6.0 release needs an earlier toolchain: on `moon
+0.1.20261104` / `moonc v0.10.20`, its dependency on
+`moonbitlang/async@0.19.0` fails because the old `moon.mod.json` is no longer
+supported. The 0.6.1 maintenance checkout uses
+`bobzhang/html_parser@0.2.3` and `moonbitlang/async@0.22.9` and passes the
+current toolchain checks. At the time of this update, 0.6.1 has not yet been
+published; use the checkout with this toolchain until it is available.
 
 ```text
 moon new a11ytrace-demo
 cd a11ytrace-demo
-moon add youyong5/a11ytrace@0.6.0
+moon add youyong5/a11ytrace@0.6.1
 ```
 
 Add this import to the generated `cmd/main/moon.pkg` before its `pkgtype`
@@ -55,7 +63,7 @@ moon run cmd/main
 
 ## Dependency and use
 
-It uses [`bobzhang/html_parser` 0.1.8](https://github.com/bobzhang/html_parser) to parse HTML into a DOM; A11yTrace does not parse HTML with regular expressions.
+The 0.6.1 checkout uses [`bobzhang/html_parser` 0.2.3](https://github.com/bobzhang/html_parser) to parse HTML into a DOM; A11yTrace does not parse HTML with regular expressions.
 
 ```moonbit nocheck
 import {
@@ -329,6 +337,6 @@ and named test evidence.
 
 ## License and attribution
 
-A11yTrace's audit rules and library code are original work licensed under Apache-2.0 (see [LICENSE](LICENSE)). It depends on, but does not copy, `bobzhang/html_parser` 0.1.8 and the native CLI's `moonbitlang/async` 0.19.0; both dependencies are Apache-2.0 licensed.
+A11yTrace's audit rules and library code are original work licensed under Apache-2.0 (see [LICENSE](LICENSE)). The 0.6.1 checkout depends on, but does not copy, `bobzhang/html_parser` 0.2.3 and the native CLI's `moonbitlang/async` 0.22.9; both dependencies are Apache-2.0 licensed.
 
 HTML-Validate is an MIT-licensed reference project, and axe-core and W3C ACT Rules are reference material only; A11yTrace does not include or copy their source code.

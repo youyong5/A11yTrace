@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # v1.22 is the fixed release recommended by the action's documentation.
+      # Track the current stable MoonBit toolchain to catch compatibility changes.
       - name: Install MoonBit
-        uses: hustcer/setup-moonbit@v1.22
+        uses: hustcer/setup-moonbit@v1.26
         with:
-          version: 0.10.14+7d59c7ec9
+          version: latest
 
       - name: Show toolchain version
         run: moon version --all

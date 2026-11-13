@@ -11,7 +11,7 @@
 
 name = "youyong5/a11ytrace"
 
-version = "0.6.0"
+version = "0.6.1"
 
 readme = "README.mbt.md"
 
@@ -26,6 +26,6 @@ preferred_target = "wasm"
 description = "Pure HTML accessibility checks for MoonBit projects."
 
 import {
-  "bobzhang/html_parser@0.1.8",
-  "moonbitlang/async@0.19.0",
+  "bobzhang/html_parser@0.2.3",
+  "moonbitlang/async@0.22.9",
 }
